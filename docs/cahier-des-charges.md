@@ -622,7 +622,7 @@ Un même front-end JS sert la page locale et les pages WordPress. Il lit une API
 
 Les graphiques doivent rester lisibles jusqu'à 10 antennes :
 
-- **Une couleur fixe par antenne** dans tous les graphiques et toutes les pages, prise dans une palette catégorielle de 10 couleurs distinguables, accessible aux daltoniens, en thème clair et en thème sombre. Un motif de trait ou un marqueur doublent la couleur.
+- **Une couleur fixe par antenne** dans tous les graphiques et toutes les pages, prise dans une palette catégorielle de **8 couleurs** validée pour les daltoniens en thème clair et en thème sombre. Le marqueur (cercle, carré, triangle, losange…) double toujours la couleur. Les antennes 9 et 10 reprennent les couleurs 1 et 2 avec un trait pointillé et un marqueur différent ; une palette plus large ne resterait pas distinguable.
 - **Légende interactive** : afficher ou masquer une antenne ; survol d'une antenne qui atténue les autres.
 - **Choix de l'antenne de référence** à l'affichage : tous les écarts sont recalculés par rapport à elle.
 - **Mode « focus »** : une antenne choisie contre la référence, les autres en gris clair.
@@ -786,7 +786,8 @@ Un seul code source, trois procédures : Windows 10/11 64 bits, Debian 12 ou plu
 
 - [ ] API SDRplay : un ou plusieurs appareils par processus, et nombre maximal d'appareils gérés par son service (mode simultané à N RSP2 Pro).
 - [ ] Débit USB réel par SDR à la fréquence d'échantillonnage minimale, et nombre de SDR par contrôleur USB.
-- [ ] Palette de 10 couleurs : validation daltonisme en thème clair et sombre (P0).
+- [x] Palette : 8 couleurs validées (clair et sombre) ; antennes 9 et 10 par pointillé et marqueur (P0, 2026-11-04).
+- [ ] Polices (IBM Plex Sans, Sans Condensed, Mono) embarquées dans le dépôt pour le fonctionnement hors ligne (licence OFL).
 - [ ] Latence et temps d'établissement réels de la bascule A/B du RSP2 Pro (résultat attendu de P2).
 - [ ] Bande utile réelle de l'Airspy HF+ Discovery et comportement HF de la RTL-SDR V4.
 - [ ] Seuils par défaut des verdicts de qualification (marges, fraction utile minimale par classe).

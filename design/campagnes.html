@@ -1,0 +1,429 @@
+<title>openDualSDR Campagnes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout : bloc du plugin dans une page WordPress ; filtres en une bande, synthèse si une paire de types est choisie,
+   puis une liste de campagnes (une ligne = une campagne) avec son profil sur 24 h en miniature. */
+:root {
+  --bg: #f2f3f0;
+  --surface: #fcfcfb;
+  --surface-2: #f6f7f4;
+  --ink: #121512;
+  --ink-2: #4b514c;
+  --muted: #7d837d;
+  --line: #e1e2dc;
+  --axis: #c3c5bd;
+  --ring: rgba(18, 21, 18, 0.10);
+  --night: rgba(38, 52, 110, 0.10);
+  --margin: rgba(125, 131, 125, 0.22);
+  --good: #0ca30c;
+  --warning: #fab219;
+  --good-ink: #006300;
+  --live: #0ca30c;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-cond: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e100e; --surface: #181a18; --surface-2: #1e211e; --ink: #eef0ec; --ink-2: #c0c4bc;
+    --muted: #8a8e88; --line: #2b2e2b; --axis: #3b3e3a; --ring: rgba(255, 255, 255, 0.10);
+    --night: rgba(150, 170, 255, 0.08); --margin: rgba(138, 142, 136, 0.22); --good-ink: #3cc23c;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e100e; --surface: #181a18; --surface-2: #1e211e; --ink: #eef0ec; --ink-2: #c0c4bc;
+  --muted: #8a8e88; --line: #2b2e2b; --axis: #3b3e3a; --ring: rgba(255, 255, 255, 0.10);
+  --night: rgba(150, 170, 255, 0.08); --margin: rgba(138, 142, 136, 0.22); --good-ink: #3cc23c;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.eyebrow { font-family: var(--font-cond); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Cadre « site WordPress » de la maquette */
+.site { border-bottom: 1px solid var(--line); background: var(--surface); }
+.site .wrap { display: flex; align-items: center; gap: 16px; padding-block: 12px; flex-wrap: wrap; }
+.site .name { font-weight: 600; }
+.site nav { display: flex; gap: 16px; font-size: 14px; color: var(--ink-2); flex-wrap: wrap; }
+.site nav span[aria-current] { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+.mock-flag { margin-left: auto; font-size: 12px; color: var(--ink-2); border: 1px dashed var(--axis); border-radius: 999px; padding: 2px 10px; }
+
+.head { padding-block: 30px 18px; display: grid; gap: 8px; }
+.head h1 { margin: 0; font-family: var(--font-cond); font-weight: 600; font-size: clamp(28px, 3.6vw, 40px); line-height: 1.1; text-wrap: balance; }
+.head p { margin: 0; color: var(--ink-2); max-width: 70ch; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 14px; color: var(--ink-2); padding-top: 4px; }
+.stats b { color: var(--ink); font-weight: 600; }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px color-mix(in srgb, var(--live) 22%, transparent); margin-right: 6px; vertical-align: 1px; }
+
+/* Filtres */
+.filters { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 14px 16px; display: grid; gap: 12px; }
+.frow { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; }
+.ctl { display: grid; gap: 4px; min-width: 0; }
+.ctl > .eyebrow { font-size: 11px; }
+select, input[type="search"] {
+  font: inherit; font-size: 13.5px; color: var(--ink); background: var(--surface); border: 0; border-radius: var(--r);
+  box-shadow: inset 0 0 0 1px var(--line); padding: 6px 8px; min-height: 32px; max-width: 100%;
+}
+input[type="search"] { width: 170px; }
+.pair { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pair .vs { font-size: 13px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: 13px; color: var(--ink-2); background: var(--surface); border: 0; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); padding: 3px 11px; cursor: pointer; }
+.chip:hover { color: var(--ink); box-shadow: inset 0 0 0 1px var(--axis); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); box-shadow: none; }
+.seg { display: inline-flex; background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--line); padding: 2px; }
+.seg button { font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 0; border-radius: 4px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.seg button:hover { color: var(--ink); background: var(--surface-2); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-2); cursor: pointer; min-height: 32px; }
+.check input { width: 16px; height: 16px; accent-color: var(--ink); }
+.linkbtn { font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 0; padding: 2px 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.linkbtn:hover { color: var(--ink); }
+:is(button, select, input, a):focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+main { display: grid; gap: 18px; padding-block: 18px 56px; }
+.result-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; color: var(--ink-2); }
+.result-bar b { color: var(--ink); }
+
+/* Synthèse d'une paire de types */
+.synth { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 16px 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 24px; align-items: center; }
+@media (max-width: 760px) { .synth { grid-template-columns: minmax(0, 1fr); } }
+.synth h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.synth p { margin: 0; color: var(--ink-2); font-size: 14px; max-width: 70ch; }
+.synth .nums { display: flex; gap: 22px; }
+.synth .num-v { font-size: 24px; font-weight: 600; line-height: 1.15; }
+.synth .num-l { font-size: 12.5px; color: var(--muted); }
+
+/* Liste des campagnes */
+.list { display: grid; gap: 10px; }
+.camp {
+  background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring);
+  display: grid; grid-template-columns: 92px minmax(0, 1fr) 210px 190px; gap: 6px 22px; align-items: center;
+  padding: 14px 18px; text-decoration: none; color: inherit;
+}
+.camp:hover { box-shadow: inset 0 0 0 1px var(--axis); }
+@media (max-width: 1000px) { .camp { grid-template-columns: 80px minmax(0, 1fr) 190px; } .camp .verdict { grid-column: 2 / -1; } }
+@media (max-width: 620px) { .camp { grid-template-columns: minmax(0, 1fr); } .camp .verdict { grid-column: auto; } }
+.band { display: grid; gap: 2px; }
+.band .b { font-family: var(--font-cond); font-weight: 600; font-size: 22px; line-height: 1.1; }
+.band .f { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.main-col { display: grid; gap: 5px; min-width: 0; }
+.title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.camp h3 { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.3; }
+.status { font-size: 12px; border-radius: 999px; padding: 1px 8px; box-shadow: inset 0 0 0 1px var(--axis); color: var(--ink-2); white-space: nowrap; }
+.status.live { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--live) 50%, transparent); color: var(--good-ink); }
+.ants { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--ink-2); }
+.ants span { display: inline-flex; align-items: center; gap: 5px; }
+.abadge { font-style: normal; width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font-family: var(--font-cond); font-weight: 600; font-size: 11px; flex: none; }
+.meta { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12.5px; color: var(--muted); }
+.meta b { color: var(--ink-2); font-weight: 500; }
+.spark { display: grid; gap: 2px; }
+.spark svg { width: 100%; height: 54px; display: block; }
+.spark .cap { font-size: 11.5px; color: var(--muted); }
+.verdict { display: grid; gap: 3px; font-size: 13.5px; }
+.verdict .row { display: flex; justify-content: space-between; gap: 10px; }
+.verdict .row span:first-child { color: var(--muted); }
+.verdict .v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 500; }
+.qual { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2); }
+.qual.no { color: var(--muted); }
+.ico { width: 14px; height: 14px; display: inline-block; vertical-align: -2px; flex: none; }
+.progress { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; width: 140px; max-width: 100%; }
+.progress i { display: block; height: 100%; background: var(--live); }
+
+.empty { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 28px; text-align: center; color: var(--ink-2); }
+.pager { display: flex; justify-content: center; gap: 6px; font-size: 13.5px; color: var(--ink-2); }
+.pager span { padding: 4px 10px; border-radius: 4px; }
+.pager span[aria-current] { background: var(--ink); color: var(--surface); }
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+footer .wrap { padding-block: 16px 28px; }
+</style>
+
+<header class="site">
+  <div class="wrap">
+    <span class="name">Radio-club exemple</span>
+    <nav aria-label="Menu du site"><span>Accueil</span><span aria-current="page">Comparaisons d'antennes</span><span>Stations</span><span>À propos</span></nav>
+    <span class="mock-flag">Maquette P0, données simulées</span>
+  </div>
+</header>
+
+<div class="wrap head">
+  <div class="eyebrow">openDualSDR</div>
+  <h1>Comparaisons d'antennes</h1>
+  <p>Campagnes de mesure publiées par les opérateurs : les mêmes signaux reçus en même temps sur plusieurs antennes, avec l'écart mesuré de jour et de nuit.</p>
+  <div class="stats" id="stats"></div>
+</div>
+
+<main class="wrap">
+  <form class="filters" id="filters" aria-label="Filtres">
+    <div class="frow">
+      <div class="ctl"><span class="eyebrow" id="lbl-band">Bande</span><div class="chips" id="f-band" role="group" aria-labelledby="lbl-band"></div></div>
+    </div>
+    <div class="frow">
+      <div class="ctl"><span class="eyebrow">Types d'antennes comparés</span>
+        <div class="pair">
+          <select id="f-typeA" aria-label="Premier type d'antenne"></select>
+          <span class="vs">contre</span>
+          <select id="f-typeB" aria-label="Second type d'antenne"></select>
+        </div>
+      </div>
+      <div class="ctl"><label class="eyebrow" for="f-op">Opérateur</label><select id="f-op"></select></div>
+      <div class="ctl"><span class="eyebrow">Mode</span>
+        <div class="seg" id="f-mode"><button type="button" data-v="all" aria-pressed="true">Tous</button><button type="button" data-v="simultané" aria-pressed="false">Simultané</button><button type="button" data-v="commuté" aria-pressed="false">Commuté</button></div>
+      </div>
+      <div class="ctl"><label class="eyebrow" for="f-sdr">SDR</label><select id="f-sdr"></select></div>
+      <div class="ctl"><label class="eyebrow" for="f-period">Période</label>
+        <select id="f-period"><option value="all">Toutes</option><option value="30">30 derniers jours</option><option value="90">90 derniers jours</option><option value="live">En cours</option></select>
+      </div>
+      <label class="check"><input type="checkbox" id="f-qual"> Qualifiées seulement</label>
+      <div class="ctl"><label class="eyebrow" for="f-q">Indicatif</label><input type="search" id="f-q" placeholder="ex. F4ABC" autocomplete="off"></div>
+    </div>
+  </form>
+
+  <div class="result-bar">
+    <span id="count"></span>
+    <span style="display:flex;gap:16px;align-items:baseline;flex-wrap:wrap">
+      <label for="f-sort" class="eyebrow" style="font-size:11px">Trier par</label>
+      <select id="f-sort"><option value="recent">Plus récentes</option><option value="long">Plus longues</option><option value="gap">Écart le plus marqué</option></select>
+      <button type="button" class="linkbtn" id="reset">Effacer les filtres</button>
+    </span>
+  </div>
+
+  <section class="synth" id="synth" hidden aria-live="polite"></section>
+  <div class="list" id="list"></div>
+  <div class="empty" id="empty" hidden>Aucune campagne ne correspond à ces filtres. <button type="button" class="linkbtn" id="reset2">Effacer les filtres</button></div>
+  <nav class="pager" aria-label="Pages"><span aria-current="page">1</span><span>2</span><span>3</span></nav>
+</main>
+
+<footer><div class="wrap">Maquette de la phase P0 d'openDualSDR (bloc du plugin WordPress). Indicatifs, campagnes et mesures sont simulés.</div></footer>
+
+<script>
+"use strict";
+const NF1 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const s1 = v => v == null ? "—" : (v > 0.049 ? "+" : "") + NF1.format(Math.abs(v) < 0.05 ? 0 : v).replace("-", "−");
+const fmtDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+const TODAY = new Date("2026-11-04T12:00:00Z");
+const dayMs = 864e5;
+
+const BANDS = [
+  ["80 m", "3,500–3,800"], ["85 m", "3,400–3,500"], ["60 m", "5,351–5,367"], ["45 m", "6,610–6,710"], ["40 m", "7,000–7,200"],
+  ["30 m", "10,100–10,150"], ["20 m", "14,000–14,350"], ["17 m", "18,068–18,168"], ["15 m", "21,000–21,450"], ["12 m", "24,890–24,990"],
+  ["CB", "26,000–28,000"], ["10 m", "28,000–29,700"],
+];
+const BAND_F = Object.fromEntries(BANDS);
+const TYPES = ["Dipôle", "V inversé", "Verticale ¼ λ", "EFHW", "Long fil", "Delta loop", "Boucle magnétique", "Yagi", "Moxon", "Mini-whip", "Beverage"];
+
+// a : antennes [type, nom court] ; d/n : écart jour / nuit de B − A (2 antennes) ; best : meilleures de jour et de nuit (plus de 2)
+const C = [
+  { op: "F4ABC", loc: "JN18", band: "40 m", a: [["Dipôle", "dipôle 8 m"], ["Verticale ¼ λ", "verticale"]], mode: "simultané", sdr: "SDRplay RSP2 Pro", start: "2026-11-03", days: 5, status: "done", q: 0.4, d: -5.1, n: 1.8 },
+  { op: "F4ABC", loc: "JN18", band: "40 m", a: [["Dipôle", "dipôle"], ["Verticale ¼ λ", "verticale"], ["Delta loop", "delta loop"], ["EFHW", "EFHW"], ["Long fil", "long fil"], ["Mini-whip", "mini-whip"]], mode: "simultané", sdr: "RTL-SDR Blog V4", start: "2026-10-20", days: 7, status: "done", q: 0.7, best: ["C", "B"], d: 1.6, n: 2.4 },
+  { op: "F5DEF", loc: "JN03", band: "45 m", a: [["Dipôle", "dipôle 10 m"], ["Delta loop", "delta loop"]], mode: "commuté", sdr: "SDRplay RSP2 Pro", start: "2026-11-01", days: 14, status: "live", progress: 0.21, q: 0.5, d: 1.2, n: 0.3 },
+  { op: "F8GHI", loc: "JN26", band: "80 m", a: [["V inversé", "V inversé 12 m"], ["Verticale ¼ λ", "verticale"]], mode: "simultané", sdr: "Airspy HF+ Discovery", start: "2026-10-12", days: 10, status: "done", q: 0.3, d: -6.3, n: 2.9 },
+  { op: "ON4JKL", loc: "JO20", band: "20 m", a: [["Yagi", "Yagi 3 él."], ["Dipôle", "dipôle rotatif"]], mode: "simultané", sdr: "SDRplay RSP2 Pro", start: "2026-10-28", days: 3, status: "done", q: 0.4, d: -4.4, n: -3.1 },
+  { op: "HB9MNO", loc: "JN36", band: "40 m", a: [["Dipôle", "dipôle 6 m"], ["Verticale ¼ λ", "verticale"]], mode: "commuté", sdr: "SDRplay RSP2 Pro", start: "2026-09-30", days: 6, status: "done", q: 0.6, d: -3.9, n: 1.5 },
+  { op: "F1PQR", loc: "IN88", band: "CB", a: [["Verticale ¼ λ", "GPA 27"], ["Long fil", "long fil 15 m"]], mode: "simultané", sdr: "RTL-SDR Blog V4", start: "2026-10-05", days: 2, status: "done", q: null, d: -2.6, n: -1.9 },
+  { op: "F5DEF", loc: "JN03", band: "85 m", a: [["Dipôle", "dipôle 85 m"], ["EFHW", "EFHW"]], mode: "simultané", sdr: "SDRplay RSP2 Pro", start: "2026-10-15", days: 4, status: "done", q: 0.5, d: 0.4, n: 0.9 },
+  { op: "F8GHI", loc: "JN26", band: "40 m", a: [["Delta loop", "delta loop"], ["Boucle magnétique", "boucle magnétique"]], mode: "simultané", sdr: "Airspy HF+ Discovery", start: "2026-10-24", days: 3, status: "done", q: 0.3, d: -4.8, n: -3.5 },
+  { op: "ON4JKL", loc: "JO20", band: "10 m", a: [["Moxon", "Moxon"], ["Verticale ¼ λ", "verticale"]], mode: "simultané", sdr: "SDRplay RSP2 Pro", start: "2026-11-02", days: 7, status: "live", progress: 0.29, q: 0.4, d: 3.1, n: null },
+  { op: "F4STU", loc: "JN12", band: "80 m", a: [["Dipôle", "dipôle 5 m (NVIS)"], ["Verticale ¼ λ", "verticale"]], mode: "simultané", sdr: "SDRplay RSP2 Pro", start: "2026-08-10", days: 21, status: "done", q: 0.4, d: -7.8, n: 2.2 },
+  { op: "HB9MNO", loc: "JN36", band: "30 m", a: [["EFHW", "EFHW"], ["Long fil", "long fil"], ["Mini-whip", "mini-whip"]], mode: "simultané", sdr: "RTL-SDR Blog V4", start: "2026-09-12", days: 5, status: "done", q: 0.8, best: ["A", "A"], d: -1.4, n: -0.8 },
+  { op: "F1PQR", loc: "IN88", band: "45 m", a: [["Dipôle", "dipôle"], ["Long fil", "long fil"]], mode: "commuté", sdr: "SDRplay RSP2 Pro", start: "2026-10-30", days: 1, status: "done", q: null, d: -1.1, n: -0.6 },
+  { op: "F4STU", loc: "JN12", band: "40 m", a: [["Beverage", "Beverage 150 m"], ["Dipôle", "dipôle"]], mode: "simultané", sdr: "SDRplay RSP2 Pro", start: "2026-07-01", days: 30, status: "done", q: 0.3, d: -14.2, n: -11.5, snr: { d: -2.1, n: 3.4 } },
+  { op: "F4ABC", loc: "JN18", band: "17 m", a: [["Dipôle", "dipôle"], ["EFHW", "EFHW"]], mode: "commuté", sdr: "SDRplay RSP2 Pro", start: "2026-06-18", days: 2, status: "done", q: 0.5, d: -0.3, n: null },
+];
+C.forEach((c, i) => {
+  c.id = i;
+  c.startD = new Date(c.start + "T12:00:00Z");
+  c.endD = new Date(c.startD.getTime() + c.days * dayMs);
+  // Minuscule initiale sauf pour les sigles (EFHW).
+  const lf = s => /^[A-Z]{2}/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1);
+  c.title = c.a.length === 2 ? `${c.a[0][0]} contre ${lf(c.a[1][0])}` : `${c.a.length} antennes : ${c.a.map(x => lf(x[0])).join(", ")}`;
+  c.title = c.title.charAt(0).toUpperCase() + c.title.slice(1);
+});
+
+const ICON = {
+  check: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--good)"/><path d="M4.6 8.2l2.2 2.2 4.6-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  dash: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="var(--muted)" stroke-width="1.5"/><path d="M5 8h6" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+};
+const LETTERS = "ABCDEFGH";
+const inkOn = k => (k === 3 ? "#0b0b0b" : "#ffffff");
+
+/* Plus de 2 antennes : bande « meilleure antenne heure par heure ». */
+function rankSVG(c) {
+  const W = 200, H = 54, bw = W / 24;
+  const k = l => LETTERS.indexOf(l);
+  const cells = [];
+  for (let h = 0; h < 24; h++) {
+    const isDay = h >= 8 && h < 17;
+    const twi = h === 7 || h === 17;
+    const best = twi ? c.best[h === 7 ? 0 : 1] : (isDay ? c.best[0] : c.best[1]);
+    cells.push(`<rect x="${(h * bw + 0.75).toFixed(2)}" y="12" width="${(bw - 1.5).toFixed(2)}" height="30" rx="2" fill="var(--s${k(best) + 1})"/>`);
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Meilleure antenne : ${c.best[0]} de jour, ${c.best[1]} de nuit">${cells.join("")}</svg>`;
+}
+
+/* Miniature du profil sur 24 h : écart B − A selon l'heure solaire, nuits ombrées. */
+function sparkSVG(c) {
+  if (c.a.length > 2) return rankSVG(c);
+  const W = 200, H = 54, pad = 4;
+  const night = [[0, 6.6], [17.4, 24]];
+  const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const n = c.n == null ? c.d * 0.4 : c.n;
+  const pts = [];
+  for (let h = 0; h <= 24; h += 0.5) {
+    const w = sm(5.5, 9, h) * (1 - sm(15.5, 18.5, h));
+    const wob = Math.sin(h * 1.7 + c.id) * 0.35;
+    pts.push([h, c.d * w + n * (1 - w) + wob]);
+  }
+  const lim = Math.max(3, ...pts.map(p => Math.abs(p[1]))) * 1.15;
+  const x = h => pad + (W - 2 * pad) * h / 24, y = v => H / 2 - (H / 2 - pad) * v / lim;
+  const path = pts.map((p, i) => `${i ? "L" : "M"}${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join("");
+  const col = c.a.length === 2 ? "var(--s2)" : "var(--ink-2)";
+  const m = c.q ?? 0.5;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Écart sur 24 heures, de ${s1(c.d)} dB le jour à ${s1(c.n)} dB la nuit">
+    ${night.map(([a, b]) => `<rect x="${x(a)}" y="0" width="${x(b) - x(a)}" height="${H}" fill="var(--night)"/>`).join("")}
+    <rect x="0" y="${y(m)}" width="${W}" height="${y(-m) - y(m)}" fill="var(--margin)"/>
+    <line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+    <path d="${path}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+  </svg>`;
+}
+
+/* ---------- Filtres ---------- */
+const F = { bands: new Set(), typeA: "", typeB: "", op: "", mode: "all", sdr: "", period: "all", qual: false, q: "", sort: "recent" };
+const $ = id => document.getElementById(id);
+
+function fillControls() {
+  $("f-band").innerHTML = BANDS.map(([b]) => `<button type="button" class="chip" data-v="${b}" aria-pressed="false">${b}</button>`).join("");
+  const typeOpts = `<option value="">Tous types</option>` + TYPES.map(t => `<option>${t}</option>`).join("");
+  $("f-typeA").innerHTML = typeOpts; $("f-typeB").innerHTML = typeOpts;
+  const ops = [...new Set(C.map(c => c.op))].sort();
+  $("f-op").innerHTML = `<option value="">Tous</option>` + ops.map(o => `<option>${o}</option>`).join("");
+  const sdrs = [...new Set(C.map(c => c.sdr))].sort();
+  $("f-sdr").innerHTML = `<option value="">Tous</option>` + sdrs.map(o => `<option>${o}</option>`).join("");
+}
+const typesOf = c => c.a.map(x => x[0]);
+function match(c) {
+  if (F.bands.size && !F.bands.has(c.band)) return false;
+  const T = typesOf(c);
+  if (F.typeA && !T.includes(F.typeA)) return false;
+  if (F.typeB && !T.includes(F.typeB)) return false;
+  if (F.typeA && F.typeB && F.typeA === F.typeB && T.filter(t => t === F.typeA).length < 2) return false;
+  if (F.op && c.op !== F.op) return false;
+  if (F.mode !== "all" && c.mode !== F.mode) return false;
+  if (F.sdr && c.sdr !== F.sdr) return false;
+  if (F.qual && c.q == null) return false;
+  if (F.q && !c.op.toLowerCase().includes(F.q.toLowerCase().trim())) return false;
+  if (F.period === "live" && c.status !== "live") return false;
+  if (/^\d+$/.test(F.period) && (TODAY - c.endD) / dayMs > +F.period && c.status !== "live") return false;
+  return true;
+}
+
+/* Écart orienté « premier type − second type » pour la synthèse. */
+function oriented(c, tA, tB) {
+  if (c.a.length !== 2) return null;
+  const [x, y] = typesOf(c);
+  if (x === tB && y === tA) return { d: c.d, n: c.n };        // B − A = tA − tB
+  if (x === tA && y === tB) return { d: c.d == null ? null : -c.d, n: c.n == null ? null : -c.n };
+  return null;
+}
+const median = a => { const s = a.filter(v => v != null).sort((p, q) => p - q); if (!s.length) return null; const m = (s.length - 1) / 2; return (s[Math.floor(m)] + s[Math.ceil(m)]) / 2; };
+
+function renderSynth(rows) {
+  const el = $("synth");
+  if (!F.typeA || !F.typeB || F.typeA === F.typeB) { el.hidden = true; return; }
+  const pairs = rows.map(c => oriented(c, F.typeA, F.typeB)).filter(Boolean);
+  if (pairs.length < 2) { el.hidden = true; return; }
+  const md = median(pairs.map(p => p.d)), mn = median(pairs.map(p => p.n));
+  const bands = [...new Set(rows.filter(c => oriented(c, F.typeA, F.typeB)).map(c => c.band))].join(", ");
+  el.hidden = false;
+  el.innerHTML = `<div><h2>${F.typeA} contre ${F.typeB.charAt(0).toLowerCase() + F.typeB.slice(1)} : ${pairs.length} campagnes à deux antennes</h2>
+    <p>Écart médian ${F.typeA.toLowerCase()} − ${F.typeB.toLowerCase()}, toutes stations confondues (${bands}). Chaque campagne pèse autant, quelle que soit sa durée ; les installations diffèrent d'une station à l'autre.</p></div>
+    <div class="nums"><div><div class="num-v mono">${s1(md)} <small style="font-size:14px;font-weight:500;color:var(--ink-2)">dB</small></div><div class="num-l">de jour</div></div>
+    <div><div class="num-v mono">${s1(mn)} <small style="font-size:14px;font-weight:500;color:var(--ink-2)">dB</small></div><div class="num-l">de nuit</div></div></div>`;
+}
+
+function verdictHTML(c) {
+  if (c.a.length > 2) {
+    return `<div class="row"><span>Meilleure de jour</span><span class="v">${c.best[0]}</span></div>
+      <div class="row"><span>Meilleure de nuit</span><span class="v">${c.best[1]}</span></div>
+      <div class="row"><span>Référence</span><span class="v">A</span></div>`;
+  }
+  return `<div class="row"><span>Jour, B − A</span><span class="v">${s1(c.d)} dB</span></div>
+    <div class="row"><span>Nuit, B − A</span><span class="v">${c.n == null ? "bande fermée" : s1(c.n) + " dB"}</span></div>
+    ${c.snr ? `<div class="row"><span>SNR jour / nuit</span><span class="v">${s1(c.snr.d)} / ${s1(c.snr.n)}</span></div>` : ""}`;
+}
+
+function render() {
+  let rows = C.filter(match);
+  const gap = c => Math.max(Math.abs(c.d ?? 0), Math.abs(c.n ?? 0));
+  rows.sort(F.sort === "long" ? (a, b) => b.days - a.days : F.sort === "gap" ? (a, b) => gap(b) - gap(a) : (a, b) => b.startD - a.startD);
+  $("count").innerHTML = `<b>${rows.length}</b> campagne${rows.length > 1 ? "s" : ""} sur ${C.length}`;
+  renderSynth(rows);
+  $("empty").hidden = rows.length > 0;
+  $("list").innerHTML = rows.map(c => {
+    const live = c.status === "live";
+    const st = live
+      ? `<span class="status live"><span class="live-dot"></span>En cours, jour ${Math.max(1, Math.round(c.days * c.progress))} sur ${c.days}</span>`
+      : `<span class="status">Terminée</span>`;
+    const qual = c.q != null ? `<span class="qual">${ICON.check}Qualifiée ±${NF1.format(c.q)} dB</span>` : `<span class="qual no">${ICON.dash}Non qualifiée</span>`;
+    return `<a class="camp" href="#" aria-label="${c.title}, ${c.band}, ${c.op}">
+      <div class="band"><span class="b">${c.band}</span><span class="f">${BAND_F[c.band]}</span></div>
+      <div class="main-col">
+        <div class="title-row"><h3>${c.title}</h3>${st}</div>
+        <div class="ants">${c.a.map((x, k) => `<span><i class="abadge" style="background:var(--s${k + 1});color:${inkOn(k)}">${LETTERS[k]}</i>${x[1]}</span>`).join("")}</div>
+        <div class="meta"><span><b>${c.op}</b> · ${c.loc}</span><span>${fmtDate.format(c.startD)} · ${c.days} jour${c.days > 1 ? "s" : ""}</span><span>Mode ${c.mode} · ${c.sdr}</span>${qual}</div>
+        ${live ? `<div class="progress" aria-hidden="true"><i style="width:${Math.round(c.progress * 100)}%"></i></div>` : ""}
+      </div>
+      <div class="spark">${sparkSVG(c)}<span class="cap">${c.a.length === 2 ? "B − A sur 24 h, nuits ombrées" : "Meilleure antenne heure par heure"}</span></div>
+      <div class="verdict">${verdictHTML(c)}</div>
+    </a>`;
+  }).join("");
+  // état des boutons
+  document.querySelectorAll("#f-band .chip").forEach(b => b.setAttribute("aria-pressed", String(F.bands.has(b.dataset.v))));
+  document.querySelectorAll("#f-mode button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === F.mode)));
+}
+
+function stats() {
+  const ops = new Set(C.map(c => c.op)).size;
+  const live = C.filter(c => c.status === "live").length;
+  const days = C.reduce((s, c) => s + c.days, 0);
+  $("stats").innerHTML = `<span><b>${C.length}</b> campagnes publiées</span><span><b>${ops}</b> opérateurs</span><span><span class="live-dot"></span><b>${live}</b> en cours</span><span><b>${days}</b> jours de mesure</span>`;
+}
+
+function reset() {
+  Object.assign(F, { bands: new Set(), typeA: "", typeB: "", op: "", mode: "all", sdr: "", period: "all", qual: false, q: "" });
+  ["f-typeA", "f-typeB", "f-op", "f-sdr"].forEach(id => $(id).value = "");
+  $("f-period").value = "all"; $("f-qual").checked = false; $("f-q").value = "";
+  render();
+}
+
+fillControls(); stats();
+$("f-band").addEventListener("click", e => { const b = e.target.closest(".chip"); if (!b) return; const v = b.dataset.v; F.bands.has(v) ? F.bands.delete(v) : F.bands.add(v); render(); });
+$("f-mode").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; F.mode = b.dataset.v; render(); });
+$("f-typeA").addEventListener("change", e => { F.typeA = e.target.value; render(); });
+$("f-typeB").addEventListener("change", e => { F.typeB = e.target.value; render(); });
+$("f-op").addEventListener("change", e => { F.op = e.target.value; render(); });
+$("f-sdr").addEventListener("change", e => { F.sdr = e.target.value; render(); });
+$("f-period").addEventListener("change", e => { F.period = e.target.value; render(); });
+$("f-qual").addEventListener("change", e => { F.qual = e.target.checked; render(); });
+$("f-q").addEventListener("input", e => { F.q = e.target.value; render(); });
+$("f-sort").addEventListener("change", e => { F.sort = e.target.value; render(); });
+$("filters").addEventListener("submit", e => e.preventDefault());
+$("reset").addEventListener("click", reset);
+$("reset2").addEventListener("click", reset);
+$("list").addEventListener("click", e => { if (e.target.closest(".camp")) e.preventDefault(); });
+
+// État de départ réaliste : paire « Dipôle contre Verticale ¼ λ » pour montrer la synthèse.
+F.typeA = "Dipôle"; F.typeB = "Verticale ¼ λ"; $("f-typeA").value = F.typeA; $("f-typeB").value = F.typeB;
+render();
+</script>
