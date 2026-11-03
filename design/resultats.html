@@ -1,0 +1,1014 @@
+<title>openDualSDR Résultats</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout : une colonne d'instrument (max 1240 px) ; en-tête de campagne, barre de commandes collante,
+   synthèse avant détail, sections propagation → temps → signaux → installation → qualité. */
+:root {
+  --bg: #f2f3f0;
+  --surface: #fcfcfb;
+  --surface-2: #f6f7f4;
+  --ink: #121512;
+  --ink-2: #4b514c;
+  --muted: #7d837d;
+  --line: #e1e2dc;
+  --axis: #c3c5bd;
+  --ring: rgba(18, 21, 18, 0.10);
+  --night: rgba(38, 52, 110, 0.09);
+  --twilight: rgba(38, 52, 110, 0.045);
+  --calm: rgba(125, 131, 125, 0.16);
+  --margin: rgba(125, 131, 125, 0.20);
+  --neutral-mark: #8c928b;
+  --div-neg: #e34948;
+  --div-mid: #ecece7;
+  --div-pos: #2a78d6;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --good-ink: #006300;
+  --warn-ink: #7a5200;
+  --crit-ink: #a12a2a;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-cond: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e100e; --surface: #181a18; --surface-2: #1e211e; --ink: #eef0ec; --ink-2: #c0c4bc;
+    --muted: #8a8e88; --line: #2b2e2b; --axis: #3b3e3a; --ring: rgba(255, 255, 255, 0.10);
+    --night: rgba(150, 170, 255, 0.075); --twilight: rgba(150, 170, 255, 0.035);
+    --calm: rgba(138, 142, 136, 0.16); --margin: rgba(138, 142, 136, 0.20); --neutral-mark: #7e837d;
+    --div-neg: #e66767; --div-mid: #333632; --div-pos: #3987e5;
+    --good-ink: #3cc23c; --warn-ink: #f3c75a; --crit-ink: #f08a8a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e100e; --surface: #181a18; --surface-2: #1e211e; --ink: #eef0ec; --ink-2: #c0c4bc;
+  --muted: #8a8e88; --line: #2b2e2b; --axis: #3b3e3a; --ring: rgba(255, 255, 255, 0.10);
+  --night: rgba(150, 170, 255, 0.075); --twilight: rgba(150, 170, 255, 0.035);
+  --calm: rgba(138, 142, 136, 0.16); --margin: rgba(138, 142, 136, 0.20); --neutral-mark: #7e837d;
+  --div-neg: #e66767; --div-mid: #333632; --div-pos: #3987e5;
+  --good-ink: #3cc23c; --warn-ink: #f3c75a; --crit-ink: #f08a8a;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.eyebrow {
+  font-family: var(--font-cond);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Barre supérieure */
+.topbar { border-bottom: 1px solid var(--line); background: var(--surface); }
+.topbar .wrap { display: flex; align-items: center; gap: 16px; padding-block: 10px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-cond); font-weight: 600; font-size: 17px; letter-spacing: 0.01em; }
+.brand svg { flex: none; }
+.crumbs { color: var(--muted); font-size: 13px; }
+.crumbs a { color: var(--ink-2); text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+.mock-flag { margin-left: auto; font-size: 12px; color: var(--ink-2); border: 1px dashed var(--axis); border-radius: 999px; padding: 2px 10px; }
+
+/* En-tête de campagne */
+.head { padding-block: 28px 18px; display: grid; gap: 14px; }
+.head h1 {
+  margin: 0;
+  font-family: var(--font-cond);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 1.12;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+.head h1 .freq { font-family: var(--font-mono); font-weight: 500; font-size: 0.62em; color: var(--ink-2); letter-spacing: 0; white-space: nowrap; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink-2); font-size: 14px; }
+.meta span { display: inline-flex; align-items: center; gap: 6px; }
+.meta b { font-weight: 500; color: var(--ink); }
+.qual-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 2px 10px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--ring); }
+
+/* Commandes collantes */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.controls { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px); border-block: 1px solid var(--line); }
+.controls .wrap { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: end; padding-block: 10px; }
+.ctl { display: grid; gap: 4px; }
+.ctl > .eyebrow { font-size: 11px; }
+.seg { display: inline-flex; background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--line); padding: 2px; }
+.seg button {
+  font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 0; border-radius: 4px;
+  padding: 4px 10px; cursor: pointer; white-space: nowrap;
+}
+.seg button:hover { color: var(--ink); background: var(--surface-2); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.seg button:disabled { opacity: 0.4; cursor: not-allowed; }
+.seg button:focus-visible, select:focus-visible, .linkbtn:focus-visible { outline: 2px solid var(--div-pos); outline-offset: 2px; }
+select {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 0; border-radius: var(--r);
+  box-shadow: inset 0 0 0 1px var(--line); padding: 5px 8px; min-height: 30px;
+}
+.hint { font-size: 12.5px; color: var(--muted); padding-bottom: 8px; padding-block-start: 2px; max-width: 360px; }
+
+/* Synthèse */
+main { display: grid; gap: 34px; padding-block: 26px 56px; }
+.summary { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .summary { grid-template-columns: minmax(0, 1fr); } }
+.verdict { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 20px 22px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.verdict p { margin: 0; font-size: 17px; line-height: 1.55; max-width: 62ch; }
+.verdict p.second { font-size: 15px; color: var(--ink-2); }
+.verdict .auto { font-size: 12px; color: var(--muted); }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.tile { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 12px 14px; display: grid; gap: 2px; align-content: start; min-width: 0; }
+.tile .label { font-size: 13px; color: var(--ink-2); }
+.tile .value { font-size: 26px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
+.tile .value small { font-size: 14px; font-weight: 500; color: var(--ink-2); }
+.tile .sub { font-size: 12.5px; color: var(--muted); }
+.sig { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; }
+.sig.yes { color: var(--good-ink); }
+.sig.no { color: var(--muted); }
+
+/* Sections et cartes */
+section { display: grid; gap: 14px; }
+.sec-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.sec-head h2 { margin: 0; font-family: var(--font-cond); font-weight: 600; font-size: 21px; letter-spacing: 0.005em; }
+.sec-head p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 16px 16px 10px; display: grid; gap: 6px; min-width: 0; }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.card h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.card .desc { margin: 0; font-size: 13px; color: var(--muted); max-width: 70ch; }
+.chart { width: 100%; min-width: 0; }
+.h-xl { height: 380px; } .h-l { height: 320px; } .h-m { height: 280px; } .h-s { height: 230px; } .h-xs { height: 130px; }
+@media (max-width: 560px) { .h-xl { height: 320px; } .h-l { height: 300px; } }
+.key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); padding: 2px 2px 6px; }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 10px; border-radius: 2px; box-shadow: inset 0 0 0 1px var(--ring); display: inline-block; }
+.linkbtn { font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 0; padding: 2px 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.linkbtn:hover { color: var(--ink); }
+
+/* Tableaux */
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 500; color: var(--ink-2); font-size: 12px; }
+td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Antennes */
+.ants { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.ant { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.ant-top { display: flex; align-items: center; gap: 10px; }
+.ant-badge { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-cond); font-weight: 600; font-size: 14px; flex: none; }
+.ant-name { font-weight: 600; font-size: 14.5px; line-height: 1.3; }
+.ant-ref { margin-left: auto; font-size: 11px; font-family: var(--font-cond); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--axis); border-radius: 999px; padding: 1px 8px; }
+.ant dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; font-size: 13px; }
+.ant dt { color: var(--muted); }
+.ant dd { margin: 0; color: var(--ink); }
+.ant .chain { font-size: 12.5px; color: var(--ink-2); border-top: 1px solid var(--line); padding-top: 8px; }
+.note { font-size: 13px; color: var(--ink-2); background: var(--surface-2); border-radius: var(--r); padding: 10px 14px; max-width: 90ch; }
+
+/* Qualité */
+.verd-list { display: grid; gap: 8px; margin: 4px 0 8px; padding: 0; list-style: none; }
+.verd-list li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 14px; }
+.verd-list .m { font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); }
+.ico { width: 16px; height: 16px; display: inline-block; vertical-align: -3px; }
+
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+footer .wrap { padding-block: 16px 28px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand" aria-label="openDualSDR">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+        <path d="M2 15 Q6 4 11 11 T20 7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/>
+        <path d="M2 18 Q7 9 11 14 T20 12" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      openDualSDR
+    </div>
+    <nav class="crumbs" aria-label="Fil d'Ariane"><a href="#">Campagnes</a> / <span id="crumb-op">F4ABC</span> / <span id="crumb-id">40 m, novembre 2026</span></nav>
+    <span class="mock-flag">Maquette P0, données simulées</span>
+  </div>
+</header>
+
+<div class="wrap head">
+  <div class="eyebrow" id="head-eyebrow">Campagne terminée · mode simultané</div>
+  <h1 id="head-title">Dipôle contre verticale ¼ λ <span class="freq">7,000–7,200 MHz</span></h1>
+  <div class="meta" id="head-meta"></div>
+</div>
+
+<div class="controls">
+  <div class="wrap">
+    <div class="ctl"><span class="eyebrow">Exemple</span>
+      <div class="seg" data-key="set"><button data-v="2" aria-pressed="true">2 antennes</button><button data-v="6" aria-pressed="false">6 antennes</button></div>
+    </div>
+    <div class="ctl"><span class="eyebrow">Grandeur</span>
+      <div class="seg" data-key="metric"><button data-v="rssi" aria-pressed="true">RSSI</button><button data-v="noise" aria-pressed="false">Bruit</button><button data-v="snr" aria-pressed="false">SNR</button></div>
+    </div>
+    <div class="ctl"><span class="eyebrow">Vue</span>
+      <div class="seg" data-key="view"><button data-v="installation" aria-pressed="true">Installation</button><button data-v="antenne" aria-pressed="false">Antenne</button></div>
+    </div>
+    <div class="ctl"><span class="eyebrow">Classe de signal</span>
+      <div class="seg" data-key="cls"><button data-v="all" aria-pressed="true">Toutes</button><button data-v="cw" aria-pressed="false">Porteuse/CW</button><button data-v="num" aria-pressed="false">Numérique</button><button data-v="ssb" aria-pressed="false">SSB</button></div>
+    </div>
+    <div class="ctl"><label class="eyebrow" for="sel-ref">Référence</label><select id="sel-ref"></select></div>
+    <div class="ctl"><label class="eyebrow" for="sel-cmp">Comparée</label><select id="sel-cmp"></select></div>
+    <div class="hint" id="view-hint"></div>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="summary">
+    <div class="verdict">
+      <div class="eyebrow">Résumé</div>
+      <p id="verdict-main"></p>
+      <p class="second" id="verdict-second"></p>
+      <div class="auto">Phrases rédigées automatiquement ; seuls les écarts supérieurs à la marge de qualification et à l'intervalle de confiance sont affirmés.</div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+  </div>
+
+  <section>
+    <div class="sec-head"><h2>Propagation</h2><p>Tous les jours de la campagne superposés selon l'heure solaire de la station.</p></div>
+    <div class="card">
+      <div class="card-head">
+        <div><h3 id="t-profile">Écart sur 24 heures</h3><p class="desc" id="d-profile"></p></div>
+        <button class="linkbtn" id="btn-table" aria-expanded="false" aria-controls="profile-table">Afficher le tableau</button>
+      </div>
+      <div class="key" id="key-profile"></div>
+      <div id="c-profile" class="chart h-xl" role="img" aria-label="Écart en fonction de l'heure solaire"></div>
+      <div class="tbl-wrap" id="profile-table" hidden></div>
+    </div>
+    <div class="card" id="card-rank" hidden>
+      <div class="card-head"><div><h3>Meilleure antenne heure par heure</h3><p class="desc" id="d-rank"></p></div></div>
+      <div id="c-rank" class="chart h-xs" role="img" aria-label="Meilleure antenne par heure solaire"></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-head"><div><h3>Par période du jour</h3><p class="desc" id="d-box"></p></div></div>
+        <div id="c-box" class="chart h-l" role="img" aria-label="Boîtes à moustaches par période"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h3 id="t-heat">Jour par jour</h3><p class="desc" id="d-heat"></p></div></div>
+        <div id="c-heat" class="chart h-l" role="img" aria-label="Carte de chaleur jour par heure"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="sec-pairs" hidden>
+    <div class="sec-head"><h2>Toutes les paires</h2><p>Écart médian ligne − colonne. Les cases grises ne sont pas significatives après correction de Holm.</p></div>
+    <div class="card">
+      <div class="card-head">
+        <div><h3>Matrice des écarts</h3><p class="desc" id="d-pairs"></p></div>
+        <div class="seg" data-key="pairsPeriod"><button data-v="jour" aria-pressed="true">Jour</button><button data-v="nuit" aria-pressed="false">Nuit</button></div>
+      </div>
+      <div id="c-pairs" class="chart h-l" role="img" aria-label="Matrice des écarts entre paires d'antennes"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>Dans le temps</h2><p>Heure locale de la station (Europe/Paris). Nuits ombrées, bande calme en gris.</p></div>
+    <div class="card">
+      <div class="card-head"><div><h3 id="t-dts">Écart mesuré</h3><p class="desc" id="d-dts"></p></div></div>
+      <div id="c-dts" class="chart h-m" role="img" aria-label="Écart dans le temps"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div><h3 id="t-lvl">Niveaux reçus</h3><p class="desc" id="d-lvl"></p></div></div>
+      <div id="c-lvl" class="chart h-m" role="img" aria-label="Niveaux par antenne dans le temps"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>Par signal</h2><p>Signaux retenus automatiquement dans la bande.</p></div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-head"><div><h3 id="t-sig">Écart par signal</h3><p class="desc">Médiane de jour (point plein) et de nuit (point creux).</p></div></div>
+        <div id="c-sig" class="chart h-l" role="img" aria-label="Écart par signal, jour et nuit"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h3>Activité de la bande</h3><p class="desc">Nombre moyen de signaux retenus par heure locale.</p></div></div>
+        <div id="c-act" class="chart h-l" role="img" aria-label="Activité de la bande par heure"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>Installation</h2><p>Pertes calculées à 7,1 MHz. La vue « Antenne » les ajoute aux niveaux mesurés.</p></div>
+    <div class="ants" id="ants"></div>
+    <div class="note" id="coupling-note"></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>Qualité et qualification</h2></div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-head"><div><h3>Qualification A/A</h3><p class="desc" id="d-qual"></p></div></div>
+        <ul class="verd-list" id="qual-list"></ul>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h3>Mesures exclues</h3><p class="desc">Les mesures exclues restent dans la base locale avec leur code.</p></div></div>
+        <div class="tbl-wrap"><table id="tbl-quality"></table></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap">Maquette de la phase P0 d'openDualSDR. Toutes les mesures, indicatifs et installations de cette page sont simulés.</div></footer>
+
+<script src="vendor/echarts.min.js"></script>
+<script>
+"use strict";
+
+/* ---------- Utilitaires ---------- */
+const NF1 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const NF0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const MINUS = "−";
+const f1 = v => (v == null || isNaN(v)) ? "—" : NF1.format(Math.abs(v) < 0.05 ? 0 : v).replace("-", MINUS);
+const s1 = v => (v == null || isNaN(v)) ? "—" : (v > 0.049 ? "+" : "") + f1(v);
+const TZ = "Europe/Paris";
+const fmtDay = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" });
+const fmtDayHour = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const fmtHourOnly = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, hour: "numeric" });
+const localHour = ts => +new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(ts) % 24;
+const localDayKey = ts => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(ts);
+const hm = h => { h = ((h % 24) + 24) % 24; const H = Math.floor(h); const M = Math.round((h - H) * 60); return M === 60 ? `${H + 1} h` : `${H} h ${String(M).padStart(2, "0")}`; };
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = mulberry32(20261103);
+const gauss = () => { let u = 0, v = 0; while (u === 0) u = rnd(); while (v === 0) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function quantile(sorted, p) { if (!sorted.length) return null; const i = (sorted.length - 1) * p; const lo = Math.floor(i), hi = Math.ceil(i); return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo); }
+function stats(arr) {
+  const a = arr.filter(v => v != null && !isNaN(v)).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const mean = a.reduce((s, v) => s + v, 0) / a.length;
+  const sd = Math.sqrt(a.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(1, a.length - 1));
+  // Intervalle de confiance : taille effective réduite (mesures corrélées), comme le ferait le bootstrap par blocs.
+  const ci = 1.96 * sd / Math.sqrt(Math.max(1, a.length / 8));
+  return { n: a.length, med: quantile(a, 0.5), p05: quantile(a, 0.05), p10: quantile(a, 0.1), q1: quantile(a, 0.25), q3: quantile(a, 0.75), p90: quantile(a, 0.9), p95: quantile(a, 0.95), ci };
+}
+
+/* ---------- Soleil (approximation NOAA / USNO) ---------- */
+const STATION = { lat: 48.854, lon: 2.375, locator: "JN18eu" };
+function sun(ts, lat = STATION.lat, lon = STATION.lon) {
+  const R = Math.PI / 180;
+  const d = ts / 864e5 - 10957.5;
+  const g = (357.529 + 0.98560028 * d) * R;
+  const q = ((280.459 + 0.98564736 * d) % 360 + 360) % 360;
+  const L = (q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * R;
+  const e = (23.439 - 0.00000036 * d) * R;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)) / R;
+  const dec = Math.asin(Math.sin(e) * Math.sin(L));
+  let eot = q - ra; eot = ((eot + 180) % 360 + 360) % 360 - 180; eot *= 4;
+  const utcH = ((ts / 36e5) % 24 + 24) % 24;
+  const solar = ((utcH + lon / 15 + eot / 60) % 24 + 24) % 24;
+  const ha = (solar - 12) * 15 * R;
+  const el = Math.asin(Math.sin(lat * R) * Math.sin(dec) + Math.cos(lat * R) * Math.cos(dec) * Math.cos(ha)) / R;
+  return { el, solar, eot, dec };
+}
+const solarClass = el => el > 10 ? "jour" : (el < -6 ? "nuit" : "crep");
+const CLASS_LABEL = { jour: "Jour", crep: "Crépuscule", nuit: "Nuit" };
+
+/* ---------- Jeux d'antennes simulés ---------- */
+// day/night : écart de RSSI au pied d'antenne par rapport au dipôle ; nd/nn : écart de bruit.
+const ANT_6 = [
+  { id: "A", short: "dipôle", name: "Dipôle 40 m", type: "Dipôle", h: "8 m", pol: "Horizontale", az: "Axe 110° / 290°", chain: [["RG213, 25 m", 0.5]], chain2: null, sdr: "RTL-SDR Blog V4 · n° 0001", day: 0, night: 0, nd: 0, nn: 0 },
+  { id: "B", short: "verticale", name: "Verticale ¼ λ, 16 radians", type: "Verticale ¼ λ", h: "Pied au sol", pol: "Verticale", az: "Omnidirectionnelle", chain: [["RG58, 40 m", 2.1], ["Relais", 0.2]], chain2: [["RG213, 40 m", 0.8]], sdr: "RTL-SDR Blog V4 · n° 0002", day: -4.6, night: 2.4, nd: 2.2, nn: 3.1 },
+  { id: "C", short: "delta loop", name: "Delta loop 40 m", type: "Delta loop", h: "Sommet à 12 m", pol: "Horizontale", az: "Plan 20° / 200°", chain: [["H155, 30 m", 0.8]], chain2: null, sdr: "RTL-SDR Blog V4 · n° 0003", day: 1.6, night: 1.1, nd: -0.4, nn: -0.6 },
+  { id: "D", short: "EFHW", name: "EFHW 40–10 m", type: "EFHW", h: "10 m", pol: "Horizontale", az: "Axe 60° / 240°", chain: [["RG58, 15 m", 0.8], ["Unun 49:1", 1.0]], chain2: null, sdr: "RTL-SDR Blog V4 · n° 0004", day: -0.4, night: 0.9, nd: 0.3, nn: 0.4 },
+  { id: "E", short: "long fil", name: "Long fil 20 m", type: "Long fil", h: "7 m", pol: "Mixte", az: "Fil vers 150°", chain: [["RG213, 10 m", 0.2], ["Unun 9:1", 0.8]], chain2: null, sdr: "RTL-SDR Blog V4 · n° 0005", day: -2.1, night: -1.2, nd: 1.6, nn: 1.4 },
+  { id: "F", short: "mini-whip", name: "Mini-whip active", type: "Mini-whip", h: "Mât de 6 m", pol: "Verticale", az: "Omnidirectionnelle", chain: [["RG58, 20 m", 1.0]], chain2: null, sdr: "RTL-SDR Blog V4 · n° 0006", day: -9.5, night: -7.2, nd: -8.4, nn: -6.1 },
+];
+const SETS = {
+  "2": { ants: [ANT_6[0], ANT_6[1]].map(a => ({ ...a, sdr: a.sdr.replace("RTL-SDR Blog V4", "SDRplay RSP2 Pro") })), sdr: "2 × SDRplay RSP2 Pro", title: "Dipôle contre verticale ¼ λ",
+         margins: { cw: 0.2, num: 0.3, ssb: 0.9, all: 0.4 }, qual: { date: "1er nov. 2026", dur: "6 h", bias: "+0,15 dB (corrigé)", align: "1,8 ms" } },
+  "6": { ants: ANT_6, sdr: "6 × RTL-SDR Blog V4", title: "Six antennes filaires et verticales",
+         margins: { cw: 0.4, num: 0.5, ssb: 1.4, all: 0.7 }, qual: { date: "1er nov. 2026", dur: "8 h", bias: "de −0,6 à +0,4 dB selon la voie (corrigé)", align: "3,1 ms" } },
+};
+const CLASSES = ["cw", "num", "ssb"];
+const CLASS_NAME = { all: "toutes classes", cw: "porteuses et CW", num: "signaux numériques", ssb: "SSB" };
+const CLS_SCALE = { cw: 0.8, num: 0.9, ssb: 1.7 };
+const BASE = { cw: [-96, -101], num: [-104, -108], ssb: [-89, -93] };
+const NOISE = { cw: [-128, -121], num: [-131, -124], ssb: [-114, -107] };
+
+/* ---------- Génération des fenêtres de 15 min ---------- */
+const START = Date.UTC(2026, 10, 3, 11, 0);
+const STEP = 15 * 60e3;
+const NWIN = 5 * 96;
+const SEGMENT_TS = Date.UTC(2026, 10, 5, 9, 0); // segment 2 : coax de B remplacé
+const WINS = [];
+for (let i = 0; i < NWIN; i++) {
+  const ts = START + i * STEP;
+  const s = sun(ts);
+  const lh = localHour(ts);
+  const dayIdx = Math.floor(i / 96);
+  const calm = (dayIdx === 1 || dayIdx === 3) && (lh >= 3 && lh < 5);
+  WINS.push({ ts, el: s.el, solar: s.solar, eot: s.eot, cls: solarClass(s.el), w: smooth(-6, 12, s.el), lh, calm, seg: ts >= SEGMENT_TS ? 2 : 1 });
+}
+const DAY_OFF = ANT_6.map(() => Array.from({ length: 6 }, () => gauss() * 0.35));
+// RSSI et bruit au pied d'antenne, par antenne, classe et fenêtre.
+const RAW = {};
+for (const c of CLASSES) {
+  RAW[c] = { rssi: ANT_6.map(() => []), noise: ANT_6.map(() => []) };
+  for (let i = 0; i < NWIN; i++) {
+    const W = WINS[i];
+    const fade = gauss() * 3.2, nf = gauss() * 0.8;
+    const base = BASE[c][0] * W.w + BASE[c][1] * (1 - W.w);
+    const nb = NOISE[c][0] * W.w + NOISE[c][1] * (1 - W.w);
+    ANT_6.forEach((a, k) => {
+      const d = a.day * W.w + a.night * (1 - W.w) + DAY_OFF[k][Math.floor(i / 96)] + gauss() * 0.65 * CLS_SCALE[c];
+      const n = nb + nf + a.nd * W.w + a.nn * (1 - W.w) + gauss() * 0.35;
+      RAW[c].rssi[k].push(W.calm ? null : base + fade + d);
+      RAW[c].noise[k].push(n);
+    });
+  }
+}
+const lossOf = (a, i) => ((WINS[i].seg === 2 && a.chain2) ? a.chain2 : a.chain).reduce((s, e) => s + e[1], 0);
+const SIGNALS = [
+  { f: "7,0035", label: "CW", c: "cw" }, { f: "7,0230", label: "CW", c: "cw" }, { f: "7,0386", label: "WSPR", c: "num" },
+  { f: "7,0475", label: "FT4", c: "num" }, { f: "7,0740", label: "FT8", c: "num" }, { f: "7,0900", label: "SSB", c: "ssb" },
+  { f: "7,1450", label: "SSB", c: "ssb" }, { f: "7,1820", label: "SSB", c: "ssb" },
+].map(s => ({ ...s, off: ANT_6.map(() => gauss() * 0.5) }));
+
+/* ---------- État ---------- */
+const state = { set: "2", metric: "rssi", view: "installation", cls: "all", ref: 0, cmp: 1, pairsPeriod: "jour" };
+const ants = () => SETS[state.set].ants;
+const margin = () => SETS[state.set].margins[state.cls];
+const antIndex = a => ANT_6.indexOf(ANT_6.find(x => x.id === a.id));
+
+function value(a, c, i, metric = state.metric, view = state.view) {
+  if (c === "all") {
+    let s = 0;
+    for (const cc of CLASSES) { const v = value(a, cc, i, metric, view); if (v == null) return null; s += v; }
+    return s / CLASSES.length;
+  }
+  const k = antIndex(a);
+  const r = RAW[c].rssi[k][i], n = RAW[c].noise[k][i];
+  if (metric === "snr") return r == null ? null : r - n;
+  const off = view === "antenne" ? 0 : -lossOf(a, i);
+  if (metric === "rssi") return r == null ? null : r + off;
+  return n + off;
+}
+const delta = (a, b, i, metric = state.metric) => { const va = value(a, state.cls, i, metric), vb = value(b, state.cls, i, metric); return (va == null || vb == null) ? null : va - vb; };
+// "Meilleure" : plus de signal ou de SNR, moins de bruit.
+const better = v => state.metric === "noise" ? -v : v;
+
+/* ---------- Thème et couleurs ---------- */
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const T = () => ({
+  ink: css("--ink"), ink2: css("--ink-2"), muted: css("--muted"), line: css("--line"), axis: css("--axis"), surface: css("--surface"),
+  night: css("--night"), twilight: css("--twilight"), calm: css("--calm"), margin: css("--margin"), neutral: css("--neutral-mark"),
+  divNeg: css("--div-neg"), divMid: css("--div-mid"), divPos: css("--div-pos"),
+});
+const colorOf = a => css(`--s${antIndex(a) + 1}`);
+const SYMBOL = ["circle", "rect", "triangle", "diamond", "roundRect", "pin"];
+const symbolOf = a => SYMBOL[antIndex(a)];
+const inkOn = a => (a.id === "D" ? "#0b0b0b" : "#ffffff"); // texte dans un aplat jaune : noir
+
+function hexA(hex, alpha) {
+  const h = hex.replace("#", ""); const n = parseInt(h.length === 3 ? h.split("").map(x => x + x).join("") : h, 16);
+  return `rgba(${n >> 16 & 255}, ${n >> 8 & 255}, ${n & 255}, ${alpha})`;
+}
+function baseOpt(t) {
+  return {
+    animation: false,
+    textStyle: { fontFamily: css("--font-body"), color: t.ink2, fontSize: 12 },
+    grid: { left: 52, right: 18, top: 18, bottom: 34, containLabel: false },
+    tooltip: {
+      backgroundColor: t.surface, borderColor: t.line, borderWidth: 1, padding: [8, 10],
+      textStyle: { color: t.ink, fontSize: 12.5, fontFamily: css("--font-body") },
+      extraCssText: "box-shadow: 0 4px 16px rgba(0,0,0,.12); border-radius: 6px;",
+    },
+  };
+}
+const axisCommon = t => ({
+  axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false },
+  axisLabel: { color: t.muted, fontSize: 11.5 }, splitLine: { lineStyle: { color: t.line, width: 1 } },
+  nameTextStyle: { color: t.muted, fontSize: 11.5 },
+});
+const unitOf = () => ({ rssi: "dBFS", noise: "dBFS", snr: "dB" })[state.metric];
+const metricWord = () => ({ rssi: "RSSI", noise: "bruit", snr: "SNR" })[state.metric];
+const dot = (color, sym = "circle") => `<span style="display:inline-block;width:9px;height:9px;margin-right:6px;background:${color};border-radius:${sym === "circle" ? "50%" : "2px"}"></span>`;
+
+/* ---------- Bandes jour / nuit ---------- */
+function nightAreasTime(t) {
+  const areas = []; let cur = null;
+  WINS.forEach((W, i) => {
+    const c = W.cls === "jour" ? null : W.cls;
+    if (c !== (cur && cur.c)) {
+      if (cur) areas.push([{ xAxis: cur.start, itemStyle: { color: cur.c === "nuit" ? t.night : t.twilight } }, { xAxis: W.ts }]);
+      cur = c ? { c, start: W.ts } : null;
+    }
+  });
+  if (cur) areas.push([{ xAxis: cur.start, itemStyle: { color: cur.c === "nuit" ? t.night : t.twilight } }, { xAxis: START + NWIN * STEP }]);
+  return areas;
+}
+function calmAreas(t) {
+  const out = []; let s = null;
+  WINS.forEach(W => { if (W.calm && s == null) s = W.ts; if (!W.calm && s != null) { out.push([{ xAxis: s, itemStyle: { color: t.calm } }, { xAxis: W.ts }]); s = null; } });
+  return out;
+}
+const MID = START + 2.5 * 864e5;
+const DEC_MID = sun(MID).dec;
+const EOT_MID = sun(MID).eot;
+function elevAtSolar(h) {
+  const R = Math.PI / 180, lat = STATION.lat * R;
+  return Math.asin(Math.sin(lat) * Math.sin(DEC_MID) + Math.cos(lat) * Math.cos(DEC_MID) * Math.cos((h - 12) * 15 * R)) / R;
+}
+function nightAreasSolar(t) {
+  const areas = []; let cur = null;
+  for (let h = 0; h <= 24.0001; h += 0.05) {
+    const c = h > 24 ? "end" : (solarClass(elevAtSolar(h)) === "jour" ? null : solarClass(elevAtSolar(h)));
+    if (c !== (cur && cur.c)) {
+      if (cur) areas.push([{ xAxis: cur.start, itemStyle: { color: cur.c === "nuit" ? t.night : t.twilight } }, { xAxis: Math.min(24, h) }]);
+      cur = (c && c !== "end") ? { c, start: h } : null;
+    }
+  }
+  if (cur) areas.push([{ xAxis: cur.start, itemStyle: { color: cur.c === "nuit" ? t.night : t.twilight } }, { xAxis: 24 }]);
+  return areas;
+}
+// heure solaire → heure légale (UTC+1 en novembre)
+const solarToLocal = h => h - STATION.lon / 15 - EOT_MID / 60 + 1;
+
+/* ---------- Calculs ---------- */
+function profile(a, b) {
+  const bins = Array.from({ length: 24 }, () => []);
+  WINS.forEach((W, i) => { const d = delta(a, b, i); if (d != null) bins[Math.floor(W.solar) % 24].push(d); });
+  return bins.map((arr, h) => ({ h, x: h + 0.5, ...(stats(arr) || {}) }));
+}
+function byClass(a, b, metric = state.metric) {
+  const out = {};
+  for (const c of ["jour", "crep", "nuit"]) out[c] = stats(WINS.map((W, i) => W.cls === c ? delta(a, b, i, metric) : null));
+  return out;
+}
+function crossings(prof) {
+  const xs = [];
+  for (let i = 0; i < 24; i++) {
+    const p = prof[i], q = prof[(i + 1) % 24];
+    if (p.med == null || q.med == null) continue;
+    if ((p.med > 0) !== (q.med > 0)) { const x = p.x + (0 - p.med) / (q.med - p.med); xs.push(((x % 24) + 24) % 24); }
+  }
+  return xs;
+}
+
+/* ---------- Résumé ---------- */
+function phrase(cmpA, refA, s, m, metric = state.metric) {
+  const cmp = `${cmpA.short} (${cmpA.id})`, ref = `${refA.short} (${refA.id})`;
+  if (!s) return "pas de mesure";
+  const sig = Math.abs(s.med) > Math.max(m, s.ci);
+  if (!sig) return `pas d'écart significatif entre ${cmp} et ${ref} (${s1(s.med)} dB, marge ±${f1(m)} dB)`;
+  const abs = f1(Math.abs(s.med));
+  if (metric === "rssi") return `${cmp} reçoit ${abs} dB de ${s.med > 0 ? "plus" : "moins"} que ${ref}`;
+  if (metric === "snr") return `${cmp} a un SNR ${s.med > 0 ? "meilleur" : "moins bon"} de ${abs} dB que ${ref}`;
+  return `${cmp} capte ${abs} dB de bruit en ${s.med > 0 ? "plus" : "moins"} que ${ref}`;
+}
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+function renderSummary() {
+  const A = ants(), ref = A[state.ref], cmp = A[state.cmp], m = margin();
+  const bc = byClass(cmp, ref);
+  const prof = profile(cmp, ref);
+  let main = `De jour, ${phrase(cmp, ref, bc.jour, m)} (±${f1(bc.jour?.ci)} dB). La nuit, ${phrase(cmp, ref, bc.nuit, m)} (±${f1(bc.nuit?.ci)} dB).`;
+  const xs = crossings(prof);
+  const sigDay = bc.jour && Math.abs(bc.jour.med) > Math.max(m, bc.jour.ci);
+  const sigNight = bc.nuit && Math.abs(bc.nuit.med) > Math.max(m, bc.nuit.ci);
+  if (xs.length && sigDay && sigNight && (bc.jour.med > 0) !== (bc.nuit.med > 0)) {
+    main += ` L'écart change de signe vers ${xs.map(x => hm(solarToLocal(x))).join(" et ")}, heure locale.`;
+  }
+  document.getElementById("verdict-main").textContent = main;
+  let second = "";
+  if (state.metric === "rssi") {
+    const sn = byClass(cmp, ref, "snr"), nz = byClass(cmp, ref, "noise");
+    const snSig = sn.nuit && Math.abs(sn.nuit.med) > Math.max(m, sn.nuit.ci);
+    if (sigNight && bc.nuit.med > 0 && !snSig) second = `Attention : en SNR, l'avantage de nuit disparaît. ${cap(cmp.short)} (${cmp.id}) capte aussi ${f1(nz.nuit.med)} dB de bruit en plus ; le bruit extérieur domine sur les deux antennes.`;
+    else if (snSig || (sn.jour && Math.abs(sn.jour.med) > Math.max(m, sn.jour.ci))) second = `En SNR : de jour ${s1(sn.jour.med)} dB, de nuit ${s1(sn.nuit.med)} dB (${cmp.id} − ${ref.id}).`;
+    else second = "En SNR, aucun écart significatif.";
+  } else if (state.metric === "snr") {
+    second = "Le SNR ne dépend pas des pertes de la chaîne quand le bruit extérieur domine : c'est la grandeur qui départage les antennes en HF.";
+  } else {
+    second = "Une antenne plus bruyante n'est pas forcément moins bonne : comparer le SNR.";
+  }
+  document.getElementById("verdict-second").textContent = second;
+
+  const allD = stats(WINS.map((W, i) => delta(cmp, ref, i)));
+  const winsBetter = WINS.map((W, i) => delta(cmp, ref, i)).filter(v => v != null);
+  const pctBetter = 100 * winsBetter.filter(v => better(v) > 0).length / winsBetter.length;
+  const calmPct = 100 * WINS.filter(W => W.calm).length / NWIN;
+  const sigChip = s => {
+    const ok = s && Math.abs(s.med) > Math.max(m, s.ci);
+    return ok ? `<span class="sig yes">${ICON.check} significatif</span>` : `<span class="sig no">${ICON.dash} non significatif</span>`;
+  };
+  const betterWord = state.metric === "noise" ? "moins bruyante" : "meilleure";
+  document.getElementById("tiles").innerHTML = `
+    <div class="tile"><div class="label">Écart de jour</div><div class="value">${s1(bc.jour?.med)} <small>dB</small></div><div class="sub">${cmp.id} − ${ref.id} · IC 95 % ±${f1(bc.jour?.ci)}</div>${sigChip(bc.jour)}</div>
+    <div class="tile"><div class="label">Écart de nuit</div><div class="value">${s1(bc.nuit?.med)} <small>dB</small></div><div class="sub">${cmp.id} − ${ref.id} · IC 95 % ±${f1(bc.nuit?.ci)}</div>${sigChip(bc.nuit)}</div>
+    <div class="tile"><div class="label">${cmp.id} ${betterWord}</div><div class="value">${NF0.format(pctBetter)} <small>% du temps</small></div><div class="sub">Sur ${NF0.format(allD.n)} fenêtres de 15 min</div></div>
+    <div class="tile"><div class="label">Bande calme</div><div class="value">${f1(calmPct)} <small>%</small></div><div class="sub">Bruit seul mesuré pendant ces périodes</div></div>`;
+}
+
+/* ---------- Graphiques ---------- */
+const charts = {};
+function chart(id) {
+  if (!charts[id]) charts[id] = echarts.init(document.getElementById(id), null, { renderer: "canvas" });
+  return charts[id];
+}
+
+function renderProfile(t) {
+  const A = ants(), ref = A[state.ref], cmp = A[state.cmp], m = margin();
+  const others = A.filter((a, k) => k !== state.ref);
+  const series = [];
+  // bandes jour / nuit et marge
+  series.push({ type: "line", data: [], silent: true, markArea: { silent: true, data: nightAreasSolar(t) } });
+  others.forEach(a => {
+    const p = profile(a, ref);
+    const focus = a === cmp;
+    const col = colorOf(a);
+    if (focus) {
+      // Bande p10–p90 : un polygone (l'empilement ECharts ne marche pas sur un axe x de type valeur).
+      series.push({ type: "custom", name: "_band", silent: true, z: 2, tooltip: { show: false }, data: [[12, 0]], encode: { x: 0, y: 1 },
+        renderItem: (params, api) => {
+          const pts = [];
+          p.forEach(d => { if (d.p90 != null) pts.push(api.coord([d.x, d.p90])); });
+          for (let j = p.length - 1; j >= 0; j--) if (p[j].p10 != null) pts.push(api.coord([p[j].x, p[j].p10]));
+          return { type: "polygon", shape: { points: pts }, style: { fill: hexA(col, 0.16) } };
+        } });
+    }
+    series.push({
+      type: "line", name: `${a.id} · ${a.short}`, data: p.map(d => [d.x, d.med, d.p10, d.p90, d.n]),
+      symbol: symbolOf(a), symbolSize: focus ? 7 : 6, showSymbol: true,
+      lineStyle: { width: 2, color: col, opacity: focus || A.length === 2 ? 1 : 0.55 }, itemStyle: { color: col, borderColor: t.surface, borderWidth: 1.5, opacity: focus || A.length === 2 ? 1 : 0.55 },
+      emphasis: { focus: "series", lineStyle: { width: 2.5, opacity: 1 }, itemStyle: { opacity: 1 } }, z: focus ? 5 : 3,
+      markArea: focus ? { silent: true, itemStyle: { color: t.margin }, data: [[{ yAxis: -m }, { yAxis: m }]] } : undefined,
+      markLine: focus ? { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: t.axis, type: "solid", width: 1 }, data: [{ yAxis: 0 }] } : undefined,
+    });
+  });
+  const o = baseOpt(t);
+  o.grid = { left: 50, right: 18, top: 20, bottom: 42 };
+  o.xAxis = { type: "value", min: 0, max: 24, interval: 3, name: "heure solaire", nameLocation: "middle", nameGap: 26, ...axisCommon(t), axisLabel: { color: t.muted, formatter: v => `${v} h` }, splitLine: { show: false } };
+  o.yAxis = { type: "value", ...axisCommon(t), axisLabel: { color: t.muted, formatter: v => s1(v) }, name: "dB", nameGap: 10 };
+  o.legend = A.length > 2 ? { show: false } : undefined;
+  o.tooltip = { ...o.tooltip, trigger: "axis", axisPointer: { type: "line", lineStyle: { color: t.axis } },
+    formatter: ps => {
+      const rows = ps.filter(p => !p.seriesName.startsWith("_") && p.seriesName !== "series0" && p.value && p.value[1] != null);
+      if (!rows.length) return "";
+      const h = Math.floor(rows[0].value[0]);
+      let s = `<b>${h} h – ${h + 1} h solaire</b><br><span style="color:${t.muted}">≈ ${hm(solarToLocal(h))} – ${hm(solarToLocal(h + 1))} locale</span><br>`;
+      rows.forEach(p => { s += `${dot(p.color)}${p.seriesName.split(" · ")[0]} − ${ref.id} : <b>${s1(p.value[1])} dB</b> <span style="color:${t.muted}">(p10 ${s1(p.value[2])}, p90 ${s1(p.value[3])})</span><br>`; });
+      return s;
+    } };
+  o.series = series;
+  chart("c-profile").setOption(o, true);
+
+  // légende HTML (antennes + bandes)
+  const keyAnts = others.map(a => `<span>${dot(colorOf(a), symbolOf(a) === "circle" ? "circle" : "sq")}${a.id} − ${ref.id}${A.length > 2 ? "" : ` (${a.short} − ${ref.short})`}</span>`).join("");
+  document.getElementById("key-profile").innerHTML = keyAnts +
+    `<span><i class="sw" style="background:${t.night}"></i>Nuit</span><span><i class="sw" style="background:${t.twilight}"></i>Crépuscule</span>` +
+    `<span><i class="sw" style="background:${t.margin}"></i>Marge de qualification ±${f1(m)} dB</span>` +
+    `<span><i class="sw" style="background:${hexA(colorOf(cmp), 0.16)}"></i>p10–p90 (${cmp.id})</span>`;
+  document.getElementById("t-profile").textContent = `Écart de ${metricWord()} sur 24 heures`;
+  document.getElementById("d-profile").textContent = A.length > 2
+    ? `Chaque antenne moins la référence ${ref.id} (${ref.short}), ${CLASS_NAME[state.cls]}. Survolez une courbe pour la faire ressortir ; ${cmp.id} est mise en avant avec sa dispersion.`
+    : `${cmp.id} (${cmp.short}) moins ${ref.id} (${ref.short}), ${CLASS_NAME[state.cls]}. Midi solaire ≈ ${hm(solarToLocal(12))} à l'heure locale.`;
+
+  // tableau d'accessibilité
+  const p = profile(cmp, ref);
+  document.getElementById("profile-table").innerHTML = `<table><thead><tr><th>Heure solaire</th><th>Heure locale</th><th class="num">Médiane ${cmp.id} − ${ref.id}</th><th class="num">p10</th><th class="num">p90</th><th class="num">Fenêtres</th></tr></thead><tbody>${
+    p.map(d => `<tr><td>${d.h} h – ${d.h + 1} h</td><td>${hm(solarToLocal(d.h))}</td><td class="num">${s1(d.med)}</td><td class="num">${s1(d.p10)}</td><td class="num">${s1(d.p90)}</td><td class="num">${d.n ?? 0}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function renderRank(t) {
+  const A = ants(), card = document.getElementById("card-rank");
+  card.hidden = A.length <= 2;
+  if (A.length <= 2) return;
+  const ref = A[state.ref];
+  const profs = A.map(a => a === ref ? null : profile(a, ref));
+  const data = [];
+  for (let h = 0; h < 24; h++) {
+    let best = ref, bv = 0, second = null;
+    A.forEach((a, k) => { if (a === ref) return; const v = profs[k][h].med; if (v != null && better(v) > better(bv)) { second = { a: best, v: bv }; best = a; bv = v; } });
+    data.push({ value: 1, best, bv, itemStyle: { color: colorOf(best), borderRadius: 3 }, label: { color: inkOn(best) } });
+  }
+  const o = baseOpt(t);
+  o.grid = { left: 8, right: 8, top: 6, bottom: 26 };
+  o.xAxis = { type: "category", data: Array.from({ length: 24 }, (_, h) => h), ...axisCommon(t), axisLine: { show: false }, axisLabel: { color: t.muted, interval: 2, formatter: v => `${v} h` }, splitLine: { show: false } };
+  o.yAxis = { type: "value", show: false, max: 1 };
+  o.tooltip = { ...o.tooltip, trigger: "item", formatter: p => { const d = data[p.dataIndex]; return `<b>${p.dataIndex} h solaire</b><br>${dot(colorOf(d.best))}${d.best.id} · ${d.best.short}${d.best === ref ? " (référence)" : ` : ${s1(d.bv)} dB par rapport à ${ref.id}`}`; } };
+  o.series = [{ type: "bar", data, barCategoryGap: "6%", label: { show: true, position: "inside", formatter: p => data[p.dataIndex].best.id, fontFamily: css("--font-cond"), fontWeight: 600, fontSize: 13 } }];
+  chart("c-rank").setOption(o, true);
+  document.getElementById("d-rank").textContent = `Antenne au ${state.metric === "noise" ? "bruit le plus faible" : `${metricWord()} médian le plus élevé`} pour chaque heure solaire, ${CLASS_NAME[state.cls]}.`;
+}
+
+function renderBox(t) {
+  const A = ants(), ref = A[state.ref];
+  const others = A.filter((a, k) => k !== state.ref);
+  const o = baseOpt(t);
+  o.grid = { left: 50, right: 14, top: 18, bottom: 30 };
+  o.xAxis = { type: "category", data: ["Jour", "Crépuscule", "Nuit"], ...axisCommon(t), axisLabel: { color: t.ink2, fontSize: 12 }, splitLine: { show: false } };
+  o.yAxis = { type: "value", ...axisCommon(t), axisLabel: { color: t.muted, formatter: v => s1(v) } };
+  o.tooltip = { ...o.tooltip, trigger: "item", formatter: p => {
+    const [, lo, q1, med, q3, hi] = p.value;
+    return `<b>${p.seriesName} − ${ref.id}, ${p.name.toLowerCase()}</b><br>médiane ${s1(med)} dB<br>quartiles ${s1(q1)} à ${s1(q3)} dB<br><span style="color:${t.muted}">p5 ${s1(lo)} · p95 ${s1(hi)}</span>`; } };
+  o.series = others.map(a => {
+    const bc = byClass(a, ref), col = colorOf(a);
+    return { type: "boxplot", name: a.id, boxWidth: [6, others.length > 2 ? 14 : 30],
+      itemStyle: { color: hexA(col, 0.14), borderColor: col, borderWidth: 1.6 },
+      emphasis: { itemStyle: { borderWidth: 2.2 } },
+      data: ["jour", "crep", "nuit"].map(c => bc[c] ? [bc[c].p05, bc[c].q1, bc[c].med, bc[c].q3, bc[c].p95] : []),
+      markLine: a === others[0] ? { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: t.axis, type: "solid", width: 1 }, data: [{ yAxis: 0 }] } : undefined };
+  });
+  chart("c-box").setOption(o, true);
+  document.getElementById("d-box").textContent = `${others.length > 1 ? "Chaque antenne" : others[0].id} moins ${ref.id}. Boîte : quartiles ; moustaches : p5 à p95.`;
+}
+
+function divColors(t) { return [t.divNeg, hexA(t.divNeg, 0.55), t.divMid, hexA(t.divPos, 0.55), t.divPos]; }
+
+function renderHeat(t) {
+  const A = ants(), ref = A[state.ref], cmp = A[state.cmp];
+  const days = [...new Set(WINS.map(W => localDayKey(W.ts)))];
+  const cells = {};
+  WINS.forEach((W, i) => { const k = `${localDayKey(W.ts)}|${W.lh}`; (cells[k] = cells[k] || []).push(delta(cmp, ref, i)); });
+  const data = [];
+  days.forEach((d, y) => { for (let h = 0; h < 24; h++) { const s = stats(cells[`${d}|${h}`] || []); data.push([h, y, s ? +s.med.toFixed(2) : "-"]); } });
+  const dayLabels = days.map(d => fmtDay.format(new Date(d + "T12:00:00Z")));
+  const lim = state.metric === "noise" ? 4 : 6;
+  const o = baseOpt(t);
+  o.grid = { left: 84, right: 12, top: 8, bottom: 62 };
+  o.xAxis = { type: "category", data: Array.from({ length: 24 }, (_, h) => h), ...axisCommon(t), axisLine: { show: false }, axisLabel: { color: t.muted, interval: 2, formatter: v => `${v} h` }, splitArea: { show: false }, splitLine: { show: false } };
+  o.yAxis = { type: "category", data: dayLabels, inverse: true, ...axisCommon(t), axisLine: { show: false }, axisLabel: { color: t.ink2 }, splitLine: { show: false } };
+  const inv = state.metric === "noise";
+  o.visualMap = { min: -lim, max: lim, calculable: false, orient: "horizontal", left: "center", bottom: 4, itemWidth: 12, itemHeight: 160,
+    text: inv ? [`${ref.id} plus bruyante`, `${cmp.id} plus bruyante`] : [`${cmp.id} meilleure`, `${ref.id} meilleure`],
+    textStyle: { color: t.ink2, fontSize: 11.5 }, inRange: { color: inv ? divColors(t).reverse() : divColors(t) }, outOfRange: { color: t.line } };
+  o.tooltip = { ...o.tooltip, trigger: "item", formatter: p => `<b>${dayLabels[p.value[1]]}, ${p.value[0]} h – ${p.value[0] + 1} h</b><br>${cmp.id} − ${ref.id} : <b>${p.value[2] === "-" ? "bande calme" : s1(p.value[2]) + " dB"}</b>` };
+  o.series = [{ type: "heatmap", data, itemStyle: { borderColor: t.surface, borderWidth: 2, borderRadius: 2 }, emphasis: { itemStyle: { borderColor: t.ink, borderWidth: 1 } } }];
+  chart("c-heat").setOption(o, true);
+  document.getElementById("t-heat").textContent = "Jour par jour";
+  document.getElementById("d-heat").textContent = `${cmp.id} − ${ref.id} par heure locale. La régularité d'un jour à l'autre montre un effet de propagation, pas un hasard.`;
+}
+
+function renderPairs(t) {
+  const A = ants(), sec = document.getElementById("sec-pairs");
+  sec.hidden = A.length <= 2;
+  if (A.length <= 2) return;
+  const period = state.pairsPeriod, m = margin();
+  const data = [];
+  const npairs = A.length * (A.length - 1) / 2;
+  // Holm simplifié pour la maquette : seuil élargi selon le rang de la paire.
+  const raw = [];
+  A.forEach((r, y) => A.forEach((c, x) => {
+    if (x === y) { data.push({ value: [x, y, "-"], itemStyle: { color: t.line } }); return; }
+    const s = stats(WINS.map((W, i) => W.cls === period ? delta(r, c, i) : null));
+    raw.push({ x, y, s });
+  }));
+  raw.sort((p, q) => Math.abs(q.s.med) / q.s.ci - Math.abs(p.s.med) / p.s.ci);
+  raw.forEach((p, rank) => {
+    const holm = Math.sqrt(1 + Math.log(npairs - Math.floor(rank / 2)));
+    const sig = Math.abs(p.s.med) > Math.max(m, p.s.ci * holm);
+    data.push({ value: [p.x, p.y, +p.s.med.toFixed(2)], sig, itemStyle: sig ? undefined : { color: t.divMid }, label: { color: t.ink } });
+  });
+  const lim = state.metric === "noise" ? 8 : 10;
+  const inv = state.metric === "noise";
+  const o = baseOpt(t);
+  o.grid = { left: 120, right: 14, top: 8, bottom: 64 };
+  const lab = a => `${a.id} · ${a.short}`;
+  o.xAxis = { type: "category", data: A.map(a => a.id), position: "bottom", ...axisCommon(t), axisLine: { show: false }, axisLabel: { color: t.ink2, fontWeight: 600 }, splitLine: { show: false } };
+  o.yAxis = { type: "category", data: A.map(lab), inverse: true, ...axisCommon(t), axisLine: { show: false }, axisLabel: { color: t.ink2 }, splitLine: { show: false } };
+  o.visualMap = { min: -lim, max: lim, calculable: false, orient: "horizontal", left: "center", bottom: 4, itemWidth: 12, itemHeight: 160,
+    text: inv ? ["colonne plus bruyante", "ligne plus bruyante"] : ["ligne meilleure", "colonne meilleure"], textStyle: { color: t.ink2, fontSize: 11.5 },
+    inRange: { color: inv ? divColors(t).reverse() : divColors(t) }, seriesIndex: 0 };
+  o.tooltip = { ...o.tooltip, trigger: "item", formatter: p => {
+    const [x, y, v] = p.value; if (v === "-") return "";
+    return `<b>${A[y].id} − ${A[x].id}, ${CLASS_LABEL[period].toLowerCase()}</b><br>${s1(v)} dB<br><span style="color:${t.muted}">${p.data.sig ? "significatif après correction de Holm" : "non significatif"}</span>`; } };
+  o.series = [{ type: "heatmap", data, label: { show: true, formatter: p => p.value[2] === "-" ? "" : s1(p.value[2]), fontFamily: css("--font-mono"), fontSize: 12 },
+    itemStyle: { borderColor: t.surface, borderWidth: 3, borderRadius: 3 } }];
+  chart("c-pairs").setOption(o, true);
+  document.getElementById("d-pairs").textContent = `${cap(metricWord())}, ${CLASS_NAME[state.cls]}, ${CLASS_LABEL[period].toLowerCase()}. Lire : la ligne reçoit X dB de plus que la colonne.`;
+}
+
+function renderDeltaTS(t) {
+  const A = ants(), ref = A[state.ref], cmp = A[state.cmp], m = margin(), col = colorOf(cmp);
+  const sc = CLS_SCALE[state.cls] || 1.1;
+  const med = [], lo = [], band = [];
+  WINS.forEach((W, i) => {
+    const d = delta(cmp, ref, i);
+    const sp = 1.6 * sc;
+    med.push([W.ts, d]); lo.push([W.ts, d == null ? null : d - sp]); band.push([W.ts, d == null ? null : 2 * sp]);
+  });
+  const o = baseOpt(t);
+  o.grid = { left: 50, right: 18, top: 24, bottom: 34 };
+  o.xAxis = { type: "time", min: START, max: START + NWIN * STEP, ...axisCommon(t), splitLine: { show: false }, axisLabel: { color: t.muted, hideOverlap: true, formatter: v => localHour(v) === 0 ? fmtDay.format(v) : `${localHour(v)} h` } };
+  o.yAxis = { type: "value", ...axisCommon(t), axisLabel: { color: t.muted, formatter: v => s1(v) }, name: "dB", nameGap: 10 };
+  o.tooltip = { ...o.tooltip, trigger: "axis", axisPointer: { type: "line", lineStyle: { color: t.axis } }, formatter: ps => {
+    const p = ps.find(x => x.seriesName === "med"); if (!p) return "";
+    const W = WINS[p.dataIndex];
+    return `<b>${fmtDayHour.format(W.ts)}</b> · ${CLASS_LABEL[W.cls].toLowerCase()}${W.calm ? " · bande calme" : ""}<br>${dot(col)}${cmp.id} − ${ref.id} : <b>${p.value[1] == null ? "—" : s1(p.value[1]) + " dB"}</b><br><span style="color:${t.muted}">segment ${W.seg}</span>`; } };
+  o.series = [
+    { type: "line", data: [], silent: true, markArea: { silent: true, data: [...nightAreasTime(t), ...calmAreas(t)] } },
+    { type: "line", name: "lo", data: lo, stack: "b", symbol: "none", lineStyle: { opacity: 0 }, silent: true },
+    { type: "line", name: "band", data: band, stack: "b", symbol: "none", lineStyle: { opacity: 0 }, areaStyle: { color: hexA(col, 0.14) }, silent: true },
+    { type: "line", name: "med", data: med, symbol: "none", lineStyle: { width: 1.6, color: col }, itemStyle: { color: col },
+      markArea: { silent: true, itemStyle: { color: t.margin }, data: [[{ yAxis: -m }, { yAxis: m }]] },
+      markLine: { silent: true, symbol: "none", data: [
+        { yAxis: 0, lineStyle: { color: t.axis, type: "solid", width: 1 }, label: { show: false } },
+        { xAxis: SEGMENT_TS, lineStyle: { color: t.ink2, type: "dashed", width: 1 }, label: { show: true, formatter: "Segment 2", position: "insideEndTop", color: t.ink2, fontSize: 11.5 } },
+      ] } },
+  ];
+  chart("c-dts").setOption(o, true);
+  document.getElementById("t-dts").textContent = `Écart de ${metricWord()} mesuré`;
+  document.getElementById("d-dts").textContent = `${cmp.id} − ${ref.id} par fenêtre de 15 min, avec la dispersion p10–p90 et la marge de qualification.${state.view === "installation" && (cmp.chain2 || ref.chain2) && state.metric !== "snr" ? " En vue Installation, le changement de coax du segment 2 décale la courbe ; la vue Antenne le compense." : ""}`;
+}
+
+function renderLevels(t) {
+  const A = ants(), ref = A[state.ref], cmp = A[state.cmp];
+  const series = [{ type: "line", data: [], silent: true, markArea: { silent: true, data: [...nightAreasTime(t), ...calmAreas(t)] } }];
+  const sel = {};
+  A.forEach(a => {
+    const pts = [];
+    for (let i = 0; i < NWIN; i += 4) {
+      const vs = [0, 1, 2, 3].map(j => value(a, state.cls, i + j)).filter(v => v != null);
+      pts.push([WINS[i].ts + 2 * STEP, vs.length ? vs.reduce((s, v) => s + v, 0) / vs.length : null]);
+    }
+    const name = `${a.id} · ${a.short}`;
+    sel[name] = A.length <= 2 || a === ref || a === cmp;
+    series.push({ type: "line", name, data: pts, symbol: symbolOf(a), symbolSize: 5, showSymbol: false, connectNulls: false,
+      lineStyle: { width: 1.8, color: colorOf(a) }, itemStyle: { color: colorOf(a) }, emphasis: { focus: "series" } });
+  });
+  const o = baseOpt(t);
+  o.grid = { left: 56, right: 18, top: 40, bottom: 34 };
+  o.legend = { top: 0, left: 0, icon: "roundRect", itemWidth: 14, itemHeight: 4, textStyle: { color: t.ink2, fontSize: 12 }, selected: sel, inactiveColor: t.axis, data: A.map(a => `${a.id} · ${a.short}`) };
+  o.xAxis = { type: "time", min: START, max: START + NWIN * STEP, ...axisCommon(t), splitLine: { show: false }, axisLabel: { color: t.muted, hideOverlap: true, formatter: v => localHour(v) === 0 ? fmtDay.format(v) : `${localHour(v)} h` } };
+  o.yAxis = { type: "value", scale: true, ...axisCommon(t), axisLabel: { color: t.muted, formatter: v => f1(v).replace(",0", "") }, name: unitOf(), nameGap: 10 };
+  o.tooltip = { ...o.tooltip, trigger: "axis", axisPointer: { type: "line", lineStyle: { color: t.axis } }, formatter: ps => {
+    const rows = ps.filter(p => p.seriesIndex > 0); if (!rows.length) return "";
+    let s = `<b>${fmtDayHour.format(rows[0].value[0] - 2 * STEP)}</b> (moyenne horaire)<br>`;
+    rows.forEach(p => { s += `${dot(p.color)}${p.seriesName} : <b>${p.value[1] == null ? "bande calme" : f1(p.value[1]) + " " + unitOf()}</b><br>`; });
+    return s; } };
+  o.series = series;
+  chart("c-lvl").setOption(o, true);
+  document.getElementById("t-lvl").textContent = state.metric === "noise" ? "Plancher de bruit" : (state.metric === "snr" ? "SNR" : "Niveaux reçus");
+  document.getElementById("d-lvl").textContent = `Moyenne horaire, ${CLASS_NAME[state.cls]}, vue ${state.view === "antenne" ? "Antenne (au pied d'antenne)" : "Installation (au SDR)"}.${A.length > 2 ? " Cliquez sur la légende pour afficher d'autres antennes." : ""}`;
+}
+
+function renderSignals(t) {
+  const A = ants(), ref = A[state.ref], cmp = A[state.cmp], m = margin();
+  const sigs = SIGNALS.filter(s => state.cls === "all" || s.c === state.cls);
+  const kc = antIndex(cmp), kr = antIndex(ref);
+  const rows = sigs.map(s => {
+    const d = byClass(cmp, ref);
+    const dj = d.jour ? d.jour.med + s.off[kc] - s.off[kr] : null, dn = d.nuit ? d.nuit.med + (s.off[kc] - s.off[kr]) * 0.8 : null;
+    return { name: `${s.f} · ${s.label}`, dj, dn };
+  });
+  const o = baseOpt(t);
+  o.grid = { left: 100, right: 18, top: 28, bottom: 30 };
+  o.legend = { top: 0, right: 0, textStyle: { color: t.ink2, fontSize: 12 }, data: ["Jour", "Nuit"], itemWidth: 10, itemHeight: 10 };
+  o.yAxis = { type: "category", data: rows.map(r => r.name), inverse: true, ...axisCommon(t), axisLine: { show: false }, axisLabel: { color: t.ink2, fontFamily: css("--font-mono"), fontSize: 11.5 }, splitLine: { show: false } };
+  o.xAxis = { type: "value", ...axisCommon(t), axisLabel: { color: t.muted, formatter: v => s1(v) }, name: `${cmp.id} − ${ref.id} (dB)`, nameLocation: "middle", nameGap: 22 };
+  o.tooltip = { ...o.tooltip, trigger: "item", formatter: p => { const r = rows[p.dataIndex]; return `<b>${r.name} MHz</b><br>Jour : ${s1(r.dj)} dB<br>Nuit : ${s1(r.dn)} dB`; } };
+  o.series = [
+    { type: "custom", name: "liaison", silent: true, data: rows.map((r, i) => [i, r.dj, r.dn]), encode: { y: 0, x: [1, 2] },
+      renderItem: (params, api) => { const a = api.coord([api.value(1), api.value(0)]), b = api.coord([api.value(2), api.value(0)]); return { type: "line", shape: { x1: a[0], y1: a[1], x2: b[0], y2: b[1] }, style: { stroke: t.axis, lineWidth: 2 } }; },
+      markArea: { silent: true, itemStyle: { color: t.margin }, data: [[{ xAxis: -m }, { xAxis: m }]] },
+      markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: t.axis, type: "solid", width: 1 }, data: [{ xAxis: 0 }] } },
+    { type: "scatter", name: "Jour", data: rows.map((r, i) => [r.dj, i]), symbolSize: 11, itemStyle: { color: t.ink, borderColor: t.surface, borderWidth: 2 }, z: 4 },
+    { type: "scatter", name: "Nuit", data: rows.map((r, i) => [r.dn, i]), symbolSize: 11, itemStyle: { color: t.surface, borderColor: t.ink, borderWidth: 2 }, z: 4 },
+  ];
+  o.series[1].tooltip = o.series[2].tooltip = { formatter: p => { const r = rows[p.value[1]]; return `<b>${r.name} MHz</b><br>Jour : ${s1(r.dj)} dB<br>Nuit : ${s1(r.dn)} dB`; } };
+  chart("c-sig").setOption(o, true);
+  document.getElementById("t-sig").textContent = `Écart de ${metricWord()} par signal`;
+}
+
+const ACTIVITY = (() => {
+  const per = Array.from({ length: 24 }, () => []);
+  WINS.forEach(W => {
+    const base = W.calm ? 0 : Math.round(12 + 10 * (1 - W.w) + 3 * Math.sin(W.lh / 3) + gauss() * 1.5);
+    per[W.lh].push(Math.max(0, base));
+  });
+  return per.map(a => +(a.reduce((s, v) => s + v, 0) / a.length).toFixed(1));
+})();
+function renderActivity(t) {
+  const data = ACTIVITY;
+  const o = baseOpt(t);
+  o.grid = { left: 40, right: 12, top: 18, bottom: 30 };
+  o.xAxis = { type: "category", data: Array.from({ length: 24 }, (_, h) => h), ...axisCommon(t), axisLabel: { color: t.muted, interval: 2, formatter: v => `${v} h` }, splitLine: { show: false } };
+  o.yAxis = { type: "value", ...axisCommon(t), axisLabel: { color: t.muted } };
+  o.tooltip = { ...o.tooltip, trigger: "item", formatter: p => `<b>${p.name} h – ${+p.name + 1} h locale</b><br>${NF1.format(p.value)} signaux retenus en moyenne` };
+  o.series = [{ type: "bar", data, barMaxWidth: 16, itemStyle: { color: t.neutral, borderRadius: [4, 4, 0, 0] } }];
+  chart("c-act").setOption(o, true);
+}
+
+/* ---------- Blocs HTML ---------- */
+const ICON = {
+  check: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--good)"/><path d="M4.6 8.2l2.2 2.2 4.6-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  warn: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l7 12.5H1z" fill="var(--warning)"/><path d="M8 6v4" stroke="#0b0b0b" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="12" r="1" fill="#0b0b0b"/></svg>`,
+  cross: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--critical)"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  dash: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="var(--muted)" stroke-width="1.5"/><path d="M5 8h6" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+};
+
+function renderStatic() {
+  const S = SETS[state.set], A = S.ants;
+  document.getElementById("head-title").innerHTML = `${S.title} <span class="freq">7,000–7,200 MHz</span>`;
+  document.getElementById("crumb-id").textContent = state.set === "2" ? "40 m, novembre 2026" : "40 m, six antennes";
+  document.getElementById("head-meta").innerHTML = `
+    <span>Opérateur <b>F4ABC</b> · ${STATION.locator}</span>
+    <span><b>3 → 8 nov. 2026</b> · 5 jours</span>
+    <span>${S.sdr}</span>
+    <span>Bande automatique · 8 signaux</span>
+    <span class="qual-chip">${ICON.check} Qualifiée, marge ±${f1(S.margins.all)} dB</span>`;
+
+  document.getElementById("ants").innerHTML = A.map((a, k) => {
+    const l1 = a.chain.reduce((s, e) => s + e[1], 0), l2 = a.chain2 ? a.chain2.reduce((s, e) => s + e[1], 0) : null;
+    const chain = a.chain.map(e => `${e[0]} (${f1(e[1])} dB)`).join(" + ");
+    return `<article class="ant">
+      <div class="ant-top"><span class="ant-badge" style="background:${colorOf(a)};color:${inkOn(a)}">${a.id}</span><span class="ant-name">${a.name}</span>${k === state.ref ? `<span class="ant-ref">Référence</span>` : ""}</div>
+      <dl><dt>Type</dt><dd>${a.type}</dd><dt>Hauteur</dt><dd>${a.h}</dd><dt>Polarisation</dt><dd>${a.pol}</dd><dt>Orientation</dt><dd>${a.az}</dd><dt>SDR</dt><dd>${a.sdr}</dd></dl>
+      <div class="chain">Chaîne : ${chain} · <b>${f1(l1)} dB</b>${l2 != null ? `<br>Segment 2 : ${a.chain2.map(e => `${e[0]} (${f1(e[1])} dB)`).join(" + ")} · <b>${f1(l2)} dB</b>` : ""}</div>
+    </article>`;
+  }).join("");
+  document.getElementById("coupling-note").textContent = A.length > 2
+    ? "Six antennes sur un même terrain s'influencent mutuellement (distances saisies : de 9 à 25 m). Les résultats décrivent chaque antenne dans cette installation, pas l'antenne seule."
+    : "Antennes distantes de 18 m (environ 0,4 λ à 7,1 MHz) : un couplage mutuel reste possible. Les résultats décrivent les antennes dans cette installation.";
+
+  const q = S.qual, M = S.margins;
+  document.getElementById("d-qual").textContent = `Campagne A/A du ${q.date}, ${q.dur}, une antenne sur toutes les voies via un splitter. Biais résiduel ${q.bias}, alignement temporel ${q.align}.`;
+  document.getElementById("qual-list").innerHTML = `
+    <li>${ICON.check}<span>Porteuses et CW</span><span class="m">±${f1(M.cw)} dB</span></li>
+    <li>${ICON.check}<span>Signaux numériques</span><span class="m">±${f1(M.num)} dB</span></li>
+    <li>${ICON.warn}<span>SSB : désalignement de ${q.align} entre voies, marge élargie</span><span class="m">±${f1(M.ssb)} dB</span></li>
+    <li>${ICON.check}<span>Test de charge : ${state.set === "2" ? "34" : "71"} % du processeur, aucune perte d'échantillons</span><span class="m">${state.set === "2" ? "OK" : "limite"}</span></li>`;
+  const nv = state.set === "2" ? 2 : 6, tot = NWIN * 8 * nv;
+  const rows = [["SATURATION", "Écrêtage pendant la mesure", 0.2], ["CHEVAUCHEMENT", "Autre signal dans la largeur", 1.9], ["DÉSALIGNÉE", "Alignement hors tolérance (SSB)", 0.6], ["PERTE_FLUX", "Échantillons perdus", 0.03]];
+  document.getElementById("tbl-quality").innerHTML = `<thead><tr><th>Code</th><th>Motif</th><th class="num">Mesures</th><th class="num">Part</th></tr></thead><tbody>${
+    rows.map(r => `<tr><td class="mono">${r[0]}</td><td>${r[1]}</td><td class="num">${NF0.format(tot * r[2] / 100)}</td><td class="num">${r[2].toLocaleString("fr-FR", { maximumFractionDigits: 2 })} %</td></tr>`).join("")
+  }<tr><td class="mono">OK</td><td>Retenues dans les statistiques</td><td class="num">${NF0.format(tot * 0.9727)}</td><td class="num">97,3 %</td></tr></tbody>`;
+}
+
+function fillSelects() {
+  const A = ants();
+  const opts = sel => A.map((a, k) => `<option value="${k}"${k === sel ? " selected" : ""}>${a.id} · ${a.short}</option>`).join("");
+  document.getElementById("sel-ref").innerHTML = opts(state.ref);
+  document.getElementById("sel-cmp").innerHTML = A.map((a, k) => k === state.ref ? "" : `<option value="${k}"${k === state.cmp ? " selected" : ""}>${a.id} · ${a.short}</option>`).join("");
+}
+function syncButtons() {
+  document.querySelectorAll(".seg").forEach(g => {
+    const key = g.dataset.key;
+    g.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(String(state[key]) === b.dataset.v)));
+  });
+  document.getElementById("view-hint").textContent = state.metric === "snr"
+    ? "Le SNR est le même dans les deux vues : les pertes de la chaîne baissent autant le signal que le bruit extérieur."
+    : (state.view === "antenne" ? "Vue Antenne : niveaux ramenés au pied d'antenne, pertes de la chaîne ajoutées." : "Vue Installation : niveaux tels que reçus par le SDR.");
+}
+
+function renderAll() {
+  const t = T();
+  syncButtons(); fillSelects(); renderStatic(); renderSummary();
+  renderProfile(t); renderRank(t); renderBox(t); renderHeat(t); renderPairs(t); renderDeltaTS(t); renderLevels(t); renderSignals(t); renderActivity(t);
+}
+
+/* ---------- Événements ---------- */
+document.querySelectorAll(".seg").forEach(g => g.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || b.disabled) return;
+  const key = g.dataset.key; const v = b.dataset.v;
+  if (key === "set") { state.set = v; state.ref = 0; state.cmp = 1; }
+  else state[key] = v;
+  renderAll();
+}));
+document.getElementById("sel-ref").addEventListener("change", e => {
+  state.ref = +e.target.value; if (state.cmp === state.ref) state.cmp = state.ref === 0 ? 1 : 0; renderAll();
+});
+document.getElementById("sel-cmp").addEventListener("change", e => { state.cmp = +e.target.value; renderAll(); });
+document.getElementById("btn-table").addEventListener("click", e => {
+  const tb = document.getElementById("profile-table"); tb.hidden = !tb.hidden;
+  e.target.setAttribute("aria-expanded", String(!tb.hidden)); e.target.textContent = tb.hidden ? "Afficher le tableau" : "Masquer le tableau";
+});
+const ro = new ResizeObserver(() => Object.values(charts).forEach(c => c.resize()));
+document.querySelectorAll(".chart").forEach(el => ro.observe(el));
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+new MutationObserver(renderAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(renderAll); else renderAll();
+renderAll();
+</script>
