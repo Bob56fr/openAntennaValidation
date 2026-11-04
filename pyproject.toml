@@ -52,8 +52,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
-# French typography (×, −, –, ’) is legitimate in user-facing strings.
-ignore = ["RUF001"]
+# French typography (×, −, –, ’) is legitimate in user-facing strings and docstrings.
+ignore = ["RUF001", "RUF002"]
 
 [tool.mypy]
 python_version = "3.11"

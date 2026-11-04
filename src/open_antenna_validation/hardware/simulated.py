@@ -169,28 +169,28 @@ class SimulatedDriver(SdrDriver):
 
     # --- synthetic air -----------------------------------------------------------
 
-    def _carrier(self, s: SimulatedSignal, t: Floats) -> npt.NDArray[np.complex128]:
-        return np.exp(2j * math.pi * s.offset_hz * t)
+    def _carrier(self, s: SimulatedSignal, off: float, t: Floats) -> npt.NDArray[np.complex128]:
+        return np.exp(2j * math.pi * off * t)
 
-    def _ssb(self, s: SimulatedSignal, t: Floats) -> npt.NDArray[np.complex128]:
+    def _ssb(self, s: SimulatedSignal, off: float, t: Floats) -> npt.NDArray[np.complex128]:
         # Syllables at about 4 Hz, pauses between words: the envelope a speech signal has.
         syllable = np.abs(np.sin(2 * math.pi * 2.1 * t + 0.7 * np.sin(2 * math.pi * 0.37 * t)))
         words = (np.sin(2 * math.pi * 0.23 * t + s.offset_hz) > -0.4).astype(np.float64)
         env = syllable * words
         out = np.zeros(len(t), dtype=np.complex128)
         for k, tone in enumerate(SSB_TONES_HZ):
-            phase = 2 * math.pi * (s.offset_hz + tone) * t + k * 1.3
+            phase = 2 * math.pi * (off + tone) * t + k * 1.3
             out += np.exp(1j * phase) / len(SSB_TONES_HZ)
         return env * out * 2.0
 
-    def _ft8(self, s: SimulatedSignal, t: Floats) -> npt.NDArray[np.complex128]:
+    def _ft8(self, s: SimulatedSignal, off: float, t: Floats) -> npt.NDArray[np.complex128]:
         slot = np.floor(t / FT8_SLOT_S).astype(np.int64)
         local = t - slot * FT8_SLOT_S - FT8_START_S
         on = (local >= 0) & (local < FT8_SYMBOLS * FT8_SYMBOL_S) & (slot % 2 == 0)
         symbol = np.clip((local / FT8_SYMBOL_S).astype(np.int64), 0, FT8_SYMBOLS - 1)
         # Pseudo-random tone sequence, reproducible per slot and symbol.
         tone = (slot * 7919 + symbol * 104_729 + int(s.offset_hz)) % 8
-        phase = 2 * math.pi * (s.offset_hz + tone * FT8_TONE_HZ) * t
+        phase = 2 * math.pi * (off + tone * FT8_TONE_HZ) * t
         wave: npt.NDArray[np.complex128] = on * np.exp(1j * phase)
         return wave
 
@@ -221,10 +221,13 @@ class SimulatedDriver(SdrDriver):
 
         fading_db = cfg.fading_db / 2 * np.sin(2 * math.pi * t / cfg.fading_period_s)
         air = np.zeros(n, dtype=np.complex128)
+        shift = cfg.air_center_hz - self._frequency
         for s in cfg.signals:
-            if abs(s.offset_hz) >= self._rate / 2:
+            off = s.offset_hz + shift  # where the signal falls relative to the tuning
+            if abs(off) >= self._rate / 2:
                 continue
-            wave = {"carrier": self._carrier, "ssb": self._ssb, "ft8": self._ft8}[s.kind](s, t)
+            wave = {"carrier": self._carrier, "ssb": self._ssb, "ft8": self._ft8}[s.kind](
+                s, off, t)
             air += 10 ** (s.dbfs / 20) * wave
         air *= 10 ** ((fading_db + np.where(on_b, cfg.antenna_b_signal_db, 0.0)) / 20)
 

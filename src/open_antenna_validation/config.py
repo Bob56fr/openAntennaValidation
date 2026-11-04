@@ -61,6 +61,8 @@ def _default_simulated_signals() -> list[SimulatedSignal]:
 
 class SimulatedConfig(_Section):
     noise_dbfs: float = -95.0
+    # The simulated signals sit at this frequency plus their offset, whatever the tuning.
+    air_center_hz: float = 7_100_000.0
     seed: int = 1
     # Pace read_iq() like a real receiver; tests turn it off.
     realtime: bool = True
@@ -171,6 +173,31 @@ class QualificationConfig(_Section):
     validity_days: int = Field(default=180, ge=1)
 
 
+def _default_class_widths() -> dict[str, float]:
+    return {"carrier": 200.0, "digital": 100.0, "ssb": 2_700.0, "am_fm": 8_000.0}
+
+
+def _default_windows() -> list[tuple[float, float]]:
+    # (campaign duration up to, in hours ; aggregation window, in seconds)
+    return [(1.0, 10.0), (24.0, 60.0), (168.0, 300.0), (1e9, 900.0)]
+
+
+class CampaignConfig(_Section):
+    """Campaign engine (cahier des charges, sections 8 and 9)."""
+
+    # One value per signal and channel every period (at most), raw measurements kept.
+    period_s: float = Field(default=10.0, ge=1.0, le=60.0)
+    class_width_hz: dict[str, float] = Field(default_factory=_default_class_widths)
+    # A signal is present when it stands this far above its local floor.
+    presence_db: float = Field(default=6.0, gt=0.0)
+    # Band calm when no signal is present for this long.
+    calm_after_s: float = Field(default=300.0, ge=10.0)
+    # Blanking after a switch when no hardware profile exists (conservative).
+    default_blanking_ms: float = Field(default=5.0, ge=0.0, le=50.0)
+    windows: list[tuple[float, float]] = Field(default_factory=_default_windows)
+    max_duration_days: float = Field(default=31.0, gt=0.0)
+
+
 class DemoConfig(_Section):
     """Demonstration campaigns, shown while no real campaign exists (decision D9)."""
 
@@ -208,6 +235,7 @@ class Config(_Section):
     spectrum: SpectrumConfig = Field(default_factory=SpectrumConfig)
     bands: list[Band] = Field(default_factory=_default_bands)
     qualification: QualificationConfig = Field(default_factory=QualificationConfig)
+    campaign: CampaignConfig = Field(default_factory=CampaignConfig)
     demo: DemoConfig = Field(default_factory=DemoConfig)
     web: WebConfig = Field(default_factory=WebConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)

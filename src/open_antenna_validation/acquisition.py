@@ -27,6 +27,7 @@ import numpy as np
 from open_antenna_validation import bench
 from open_antenna_validation.config import HardwareConfig, ReceiverConfig, SpectrumConfig
 from open_antenna_validation.dsp.measure import Spectrum, clipping_ratio, db
+from open_antenna_validation.engine import CampaignRunner
 from open_antenna_validation.hardware import HardwareError, SdrDriver, create_driver
 from open_antenna_validation.timeutil import now_ms
 
@@ -116,6 +117,7 @@ def run_acquisition(
     clip = 0.0
     last_emit = time.monotonic()
     antenna = driver.effective_antenna(device)
+    runner: CampaignRunner | None = None
 
     try:
         while keep_running():
@@ -139,6 +141,26 @@ def run_acquisition(
                     elif name == "gain":
                         driver.set_gain_step(int(value))
                         events.put({"type": "gain", "gain_index": int(value), "ts_ms": now_ms()})
+                    elif name == "campaign_start":
+                        try:
+                            driver.set_frequency(float(value["sdr_hz"]))
+                            runner = CampaignRunner(driver, value, now_ms())
+                            center = float(value["center_hz"])
+                            events.put({"type": "campaign_started", "campaign": value["campaign"],
+                                        "dwell_ms": runner.dwell * 1000 / rate,
+                                        "blank_ms": runner.blank * 1000 / rate,
+                                        "fft_size": runner.fft})
+                        except (ValueError, HardwareError) as exc:
+                            runner = None
+                            events.put({"type": "campaign_error", "campaign": value["campaign"],
+                                        "message": str(exc)})
+                    elif name == "campaign_stop":
+                        runner = None
+                        driver.set_antenna(antenna)
+                        spec = Spectrum(spectrum_cfg.fft_size, rate)
+                        acc[:] = 0
+                        acc_frames = 0
+                        events.put({"type": "campaign_stopped"})
                     elif name == "bench":
                         events.put(run_bench_step(driver, value))
                         # Back to the input the operator had chosen, fresh spectrum.
@@ -149,6 +171,11 @@ def run_acquisition(
                         last_emit = time.monotonic()
             except queue.Empty:
                 pass
+
+            if runner is not None:
+                for event in runner.cycle():
+                    events.put(event)
+                continue
 
             iq = driver.read_iq(block)
             clip = max(clip, clipping_ratio(iq, spectrum_cfg.clip_threshold))

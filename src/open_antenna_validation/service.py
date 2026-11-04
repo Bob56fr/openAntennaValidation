@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from open_antenna_validation import __version__
+from open_antenna_validation import campaign_manager as cm
 from open_antenna_validation.acquisition import Acquisition, Event
 from open_antenna_validation.config import (
     CONFIG_FILENAME,
@@ -67,6 +68,9 @@ class Station:
         self.last_spectrum: Event | None = None
         # Bench step in progress (the worker is busy), and the last bench failure.
         self.bench: dict[str, Any] = {"busy": False}
+        # Campaign in progress (state running or interrupted), if any.
+        self.campaign: cm.Running | None = None
+        self._campaign_lock = threading.RLock()
 
     @classmethod
     def from_home(
@@ -94,6 +98,7 @@ class Station:
         self.db.log_event("service_start", {"version": __version__})
         if self.config.demo.enabled and ensure_demo_campaigns(self.db):
             log.info("Campagnes de démonstration créées")
+        self._resume_campaign()
         self._running = True
         self._start_acquisition()
 
@@ -137,6 +142,96 @@ class Station:
             acq.stop()
         self._start_acquisition()
 
+    # --- campaigns ------------------------------------------------------------------
+
+    def _resume_campaign(self) -> None:
+        """After a restart: go on with a campaign still in progress, or close it."""
+        run = cm.load_running(self.db)
+        if run is None:
+            return
+        last = self.db.query("SELECT MAX(ts_ms) FROM measurements WHERE campaign_id = ?",
+                             (run.id,))[0][0]
+        if now_ms() >= run.planned_end_ms:
+            end = min(run.planned_end_ms, int(last or run.planned_end_ms))
+            cm.finish(self.db, run, "done", end)
+            return
+        self.campaign = run
+        # The station was off: the gap is an interruption, closed when the engine restarts.
+        self._interrupt(int(last) if last else now_ms(), "Service arrêté")
+
+    def _interrupt(self, ts: int, reason: str) -> None:
+        run = self.campaign
+        if run is None or run.interrupted_since is not None:
+            return
+        run.interrupted_since = ts
+        run.engine_started = False
+        cm.switch_activity(self.db, run, "interrupted", ts, reason)
+        with self.db.transaction() as conn:
+            conn.execute("UPDATE campaigns SET state = 'interrupted' WHERE id = ?", (run.id,))
+
+    def _start_engine(self) -> None:
+        run = self.campaign
+        if run is None or self.receiver.get("state") != "running":
+            return
+        self._send("campaign_start", cm.engine_spec(run, self.config))
+        run.engine_started = True
+        if run.interrupted_since is not None:
+            run.interrupted_since = None
+            run.calm = False
+            run.last_present_ms = now_ms()
+            cm.switch_activity(self.db, run, "active", now_ms())
+            with self.db.transaction() as conn:
+                conn.execute("UPDATE campaigns SET state = 'running' WHERE id = ?", (run.id,))
+
+    def start_campaign(self, request: dict[str, Any]) -> str:
+        with self._campaign_lock:
+            if self.bench.get("busy"):
+                raise cm.CampaignError("Une mesure du banc est en cours.")
+            uuid = cm.create_campaign(self.db, self.config, self.receiver, request)
+            self.campaign = cm.load_running(self.db)
+            self._start_engine()
+        self._publish_status()
+        return uuid
+
+    def stop_campaign(self) -> None:
+        with self._campaign_lock:
+            run = self.campaign
+            if run is None:
+                raise cm.CampaignError("Aucune campagne en cours.")
+            if run.engine_started and self.receiver.get("state") == "running":
+                self._send("campaign_stop", None)
+            cm.finish(self.db, run, "abandoned", now_ms())
+            self.campaign = None
+        self._publish_status()
+
+    def _on_measurement(self, event: Event) -> None:
+        with self._campaign_lock:
+            run = self.campaign
+            if run is None or event.get("campaign") != run.uuid:
+                return
+            cm.store_measurements(self.db, self.config, run, event)
+            if int(event["ts_ms"]) + int(event["period_ms"]) >= run.planned_end_ms:
+                if self.receiver.get("state") == "running":
+                    self._send("campaign_stop", None)
+                # Closed in the database first: whoever sees no campaign sees it finished.
+                cm.finish(self.db, run, "done", run.planned_end_ms)
+                self.campaign = None
+                log.info("Campagne %s terminée", run.uuid)
+        self._publish_status()
+
+    def campaign_report(self) -> dict[str, Any] | None:
+        run = self.campaign
+        if run is None:
+            return None
+        row = self.db.query("SELECT title, start_ms, planned_end_ms, state FROM campaigns"
+                            " WHERE id = ?", (run.id,))[0]
+        last = self.db.query("SELECT MAX(ts_ms) FROM measurements WHERE campaign_id = ?",
+                             (run.id,))[0][0]
+        return {"uuid": run.uuid, "title": row["title"], "state": row["state"],
+                "start_ms": row["start_ms"], "planned_end_ms": row["planned_end_ms"],
+                "last_ms": last, "calm": run.calm, "aa": bool(run.params.get("aa")),
+                "signals": len(run.signals), "rate_hz": run.params["rate_hz"]}
+
     # --- events from the worker --------------------------------------------------
 
     def _on_event(self, event: Event) -> None:
@@ -157,6 +252,11 @@ class Station:
                              "identity": self.identity.identity,
                              "identity_changed": self.identity.changed}
             log.info("SDR ouvert : %s %s", device.model, device.serial)
+            if self.campaign is not None:
+                try:
+                    self._start_engine()
+                except HardwareError:
+                    log.exception("Reprise de la campagne")
             self._publish_status()
         elif kind == "switch":
             self.receiver["antenna"] = event["antenna"]
@@ -166,6 +266,15 @@ class Station:
         elif kind == "gain":
             self.receiver["gain_index"] = event["gain_index"]
             self.db.log_event("gain_change", {"gain_index": event["gain_index"]})
+            self._publish_status()
+        elif kind == "measurement":
+            self._on_measurement(event)
+        elif kind == "campaign_error":
+            log.error("Campagne : %s", event["message"])
+            self.db.log_event("error", {"campaign": event["campaign"],
+                                        "message": event["message"]})
+            if self.campaign is not None:
+                self._interrupt(now_ms(), event["message"])
             self._publish_status()
         elif kind in ("bench_result", "bench_error"):
             if kind == "bench_result":
@@ -187,10 +296,12 @@ class Station:
                 self.db.log_event("sdr_absent" if state == "absent" else "error",
                                   {"message": event["message"]})
                 log.warning("Acquisition : %s", event["message"])
+            self._interrupt(now_ms(), event["message"])
             self._publish_status()
             if event.get("fatal"):
                 self._schedule_restart()
         elif kind == "closed" and self.receiver.get("state") == "running" and self._running:
+            self._interrupt(now_ms(), "Acquisition arrêtée")
             self.receiver["state"] = "error"
             self.receiver["error"] = "Acquisition arrêtée de façon inattendue."
             self._publish_status()
@@ -208,7 +319,12 @@ class Station:
             raise HardwareError("Le récepteur n'est pas en marche.")
         acq.send(name, value)
 
+    def _no_campaign(self) -> None:
+        if self.campaign is not None:
+            raise HardwareError("Une campagne est en cours : le récepteur est réservé à la mesure.")
+
     def set_antenna(self, antenna: Antenna) -> None:
+        self._no_campaign()
         choices = self.receiver.get("antennas") or []
         if antenna and antenna not in choices:
             available = ", ".join(choices) if choices else "aucune sélection possible"
@@ -218,6 +334,7 @@ class Station:
         self.save_config()
 
     def set_frequency(self, hz: float) -> None:
+        self._no_campaign()
         low, high = HF_RANGE_HZ
         if not low <= hz <= high:
             raise HardwareError("Fréquence hors de la plage HF (1 à 30 MHz).")
@@ -227,6 +344,7 @@ class Station:
         self.save_config()
 
     def set_gain_step(self, index: int) -> None:
+        self._no_campaign()
         steps = self.receiver.get("gain_steps") or []
         if not 0 <= index < len(steps):
             raise HardwareError(f"Pas de gain {index} hors plage.")
@@ -237,6 +355,7 @@ class Station:
     def start_bench_step(self, run: str, step: str) -> None:
         """Ask the worker for one bench step; the result arrives as an event."""
         definition = check_step(self.db, run, step)
+        self._no_campaign()
         if self.bench.get("busy"):
             raise QualificationError("Une mesure du banc est déjà en cours.")
         q = self.config.qualification
@@ -273,4 +392,5 @@ class Station:
             "dropped": r.get("dropped", 0),
             "overload": r.get("overload", False),
             "clip_alert": r.get("clip_alert", False),
+            "campaign": self.campaign_report(),
         }

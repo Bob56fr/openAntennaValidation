@@ -25,6 +25,7 @@ library_path = ""             # vide : emplacements d'installation standard
 
 [hardware.simulated]
 noise_dbfs = -95.0            # plancher de bruit de l'antenne A
+air_center_hz = 7100000.0     # les signaux simulés sont à cette fréquence + leur décalage
 seed = 1
 realtime = true               # cadence d'un vrai récepteur
 antenna_b_signal_db = -3.0    # antenne B par rapport à A, sur les signaux…
@@ -158,6 +159,21 @@ validity_days = 180           # durée de validité d'un profil
 carrier = 2.0
 digital = 2.0
 ssb = 20.0
+
+[campaign]
+period_s = 10.0               # une mesure par signal et par voie au plus toutes les N s
+presence_db = 6.0             # signal présent s'il dépasse son plancher local de N dB
+calm_after_s = 300.0          # bande calme si aucun signal présent pendant N s
+default_blanking_ms = 5.0     # neutralisation après bascule sans profil de qualification
+max_duration_days = 31.0
+# (durée de campagne jusqu'à N heures, fenêtre d'agrégation en secondes)
+windows = [[1.0, 10.0], [24.0, 60.0], [168.0, 300.0], [1000000000.0, 900.0]]
+
+[campaign.class_width_hz]      # largeur de mesure par défaut selon la classe
+carrier = 200.0
+digital = 100.0
+ssb = 2700.0
+am_fm = 8000.0
 
 [demo]
 enabled = true                # campagnes de démonstration tant qu'aucune vraie campagne n'existe
