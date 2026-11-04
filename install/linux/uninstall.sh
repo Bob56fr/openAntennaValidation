@@ -2,7 +2,7 @@
 # Désinstallation d'openAntennaValidation.
 # Usage : sudo ./install/linux/uninstall.sh [--purge]
 #   --purge : supprime aussi les données (configuration, base, journaux) et l'utilisateur.
-# L'API SDRplay, partagée avec d'autres logiciels, est conservée.
+# L'API SDRplay, librtlsdr et libairspyhf, partagées avec d'autres logiciels, sont conservées.
 set -euo pipefail
 
 PREFIX=/opt/open-antenna-validation
