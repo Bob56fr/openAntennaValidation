@@ -58,7 +58,7 @@ def _last_sustained(flags: npt.NDArray[np.bool_], min_run: int) -> int:
     starts, ends = np.nonzero(edges == 1)[0], np.nonzero(edges == -1)[0]
     last = 0
     for k, (a, b) in enumerate(zip(starts, ends, strict=True)):
-        if k == 0 and a == 0 or b - a >= min_run:
+        if (k == 0 and a == 0) or b - a >= min_run:
             last = int(b)
     return last
 
