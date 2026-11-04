@@ -172,9 +172,11 @@ def analyze_switching(
     after_anchor = mean_db[before:]
     tail = settle_env[int(0.6 * len(settle_env)) :]
     # 4 sigma: over a few hundred correlated samples, 3 sigma is still crossed by noise alone.
-    effective_tol = max(tolerance_db, 4.0 * float(np.std(tail)), abs(float(np.mean(tail))) * 1.5)
+    effective_tol = max(tolerance_db, 4.0 * float(np.std(tail)),
+                        abs(float(np.mean(tail))) * 1.5)
     outside = np.nonzero(np.abs(settle_env) > effective_tol)[0]
-    settle_ms = float(_last_sustained(np.abs(settle_env) > effective_tol, 3 * smooth_n))         / rate * 1e3
+    settle_end = _last_sustained(np.abs(settle_env) > effective_tol, 3 * smooth_n)
+    settle_ms = settle_end / rate * 1e3
     glitch_db = float(np.max(np.abs(after_anchor[outside[0]:]))) if len(outside) else 0.0
     if detected:
         # Ignore the step itself: the glitch is the overshoot beyond the final level.
