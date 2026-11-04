@@ -12,6 +12,13 @@ Spécification : [docs/cahier-des-charges.md](docs/cahier-des-charges.md). Écar
 - Les tests sur matériel réel sont faits par l'utilisateur.
 - Projet frère : `c:\dev\openAISReceiver` (pilote SDRplay, export WordPress, leçons de `docs/decisions.md`). S'en inspirer plutôt que réinventer.
 
+## Tableau de pilotage (commun à tous les projets de l'utilisateur)
+
+https://claude.ai/artifact/2X4tFwm8p9AiEtrQ8B95rh (privé). Lu et écrit avec l'outil `ArtifactData` (`url` ci-dessus) ; jamais republier la page sauf demande de l'utilisateur (alors passer `url`, sinon une autre page est créée).
+- Collections : `projets` (fiches `breizh-audio-box`, `openremotetrx`, `commun`, `antenna-validation` ; champs `nom`, `role`, `dossier`, `version`, `etat` = en_cours / attente / bloque / pause / fait, `etape`, `prochain`, `attente` [liste], `essais` [liste], `liens` [liste], `notes`, `maj` (ISO), `maj_par`) et `commentaires` (`projet`, `texte`, `cree`, `statut` = nouveau / traite, `reponse`, `traite_le`).
+- DÉBUT de conversation : lire les `commentaires` au statut `nouveau` de la fiche `antenna-validation` ; ce sont des consignes de l'utilisateur. Une fois traité : `update` avec `reponse` (une ou deux phrases) et `statut: "traite"`.
+- FIN de chaque phase (et à tout changement d'état) : `update` de la fiche `antenna-validation` (toujours avec `if_version`). Dates en ISO, `maj_par` = la conversation.
+
 ## Conventions de code
 
 - Python 3.11+, annotations partout, `mypy --strict` sur `src/open_antenna_validation`.
@@ -41,6 +48,8 @@ Les trois contrôles (`pytest`, `ruff check`, `mypy`) doivent passer avant chaqu
 
 Plugin WordPress : `wordpress/open-antenna-validation/` (PHP) ; `python wordpress/build.py --zip` copie les fichiers partagés de `web/` et produit le zip. WordPress de test sur la Debian (accès SSH, groupe docker, sans sudo) : copier `wordpress/dev` et le plugin construit dans `~/oav/wordpress`, puis `dev/dev-up.sh` (port 8082 ; le 8081 est celui d'openAISReceiver). Tests du vrai plugin : `OAV_WP_URL=http://<debian>:8082 OAV_WP_TOKEN1=… OAV_WP_TOKEN2=… pytest -m wordpress`. Syntaxe PHP : `docker run --rm -v …:/p wordpress:6.6-php8.2-apache php -l /p/…`.
 
+Installeur Windows : les `.ps1` gardent leur BOM UTF-8 (sinon PowerShell 5.1 lit les accents en ANSI), les `.cmd` restent en ASCII (`tests/test_installers.py`).
+
 Pièges Windows : PowerShell 5.1 écrit en UTF-8 avec BOM (`Set-Content`, `Out-File`) ; ne pas l'utiliser pour modifier `pyproject.toml` ni les fichiers TOML. Un processus enfant `multiprocessing` doit abandonner ses files si le parent disparaît (D6).
 
 ## Avancement
@@ -56,5 +65,5 @@ Pièges Windows : PowerShell 5.1 écrit en UTF-8 avec BOM (`Set-Content`, `Out-F
 | P6 Résultats locaux | Livré (D11, D17) : bootstrap par blocs, Holm, qualité des données, export CSV ; pistes FT8 en P10 |
 | P7 WordPress | Livré (D18) : vérifié sur le WordPress de test (Debian, port 8082) ; à essayer sur OVH |
 | P8 RTL-SDR V4 et Airspy HF+ | Livré (D19), en attente de test sur les récepteurs |
-| P9 Installeurs | Linux : première version (`install/linux`) ; Windows : à faire |
+| P9 Installeurs | Livré (D21) : Linux de référence (essayé en conteneurs Debian 12/13) ; Windows simplifié sans service (`install/windows`), en attente de test |
 | P10 Modes numériques | À faire |

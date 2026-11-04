@@ -57,7 +57,7 @@ La liste des campagnes se filtre par opérateur, bande, paire de types d'antenne
 - **RTL-SDR Blog V4** : mode simultané, une clé par antenne, jusqu'à 28,8 MHz (au-delà, la clé change d'entrée). Clé économique, dynamique limitée (8 bits). Chaque clé doit avoir son propre numéro de série. Les autres clés RTL-SDR ne sont pas acceptées : elles ne reçoivent les ondes courtes que sans réglage de gain.
 - **Airspy HF+ Discovery** : mode simultané, un appareil par antenne. Excellent en ondes courtes, bande utile d'environ 200 kHz à la fréquence d'échantillonnage par défaut.
 - Les modèles peuvent être mélangés en mode simultané ; la campagne est alors marquée « hétérogène » et l'étalonnage A/A chiffre l'écart entre récepteurs.
-- Un ordinateur sous Windows ou Linux (Debian). Plusieurs SDR en simultané demandent un processeur à plusieurs cœurs : le test de charge le vérifie.
+- Un ordinateur sous Linux (Debian 12 ou plus récent, Raspberry Pi OS 64 bits), recommandé pour les campagnes longues, ou sous Windows 10/11. Plusieurs SDR en simultané demandent un processeur à plusieurs cœurs : le test de charge le vérifie.
 
 ## Où en est le projet
 
@@ -72,7 +72,7 @@ La liste des campagnes se filtre par opérateur, bande, paire de types d'antenne
 | Pages de résultats, statistiques, export CSV | Faites |
 | Site WordPress multi-opérateurs | Fait |
 | RTL-SDR V4 et Airspy HF+ | Faits, en attente d'essai sur les récepteurs |
-| Installeurs Windows et Linux | Linux : première version ; Windows : à faire |
+| Installeurs Windows et Linux | Faits : Linux essayé sur Debian 12 et 13 ; Windows en attente d'essai |
 | Modes numériques (FT8, FT4, WSPR) : suivi des stations, distance, propagation | À faire, en option |
 
 Tout ce qui est marqué « avec le simulateur » fonctionne de bout en bout avec un récepteur simulé ; les essais sur récepteurs réels sont en cours.

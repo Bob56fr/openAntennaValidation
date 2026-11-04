@@ -22,13 +22,13 @@ Compare la réception de deux à dix antennes HF en mesurant, sur les mêmes sig
 - Python 3.11 ou plus récent.
 - Matériel de référence : SDRplay RSP2 Pro. Aussi, en mode simultané : RTL-SDR Blog V4 et Airspy HF+ Discovery.
 - Pour un SDRplay : API SDRplay 3.x, à télécharger sur le [site de SDRplay](https://www.sdrplay.com/downloads/). Elle est propriétaire et ne peut pas être fournie avec ce logiciel. Son service (`SDRplayAPIService` sous Windows) doit tourner.
-- Pour une RTL-SDR Blog V4 : librtlsdr de la [branche RTL-SDR Blog](https://github.com/rtlsdrblog/rtl-sdr-blog/releases) (`rtlsdr.dll` et `libusb-1.0.dll` sous Windows, avec le pilote WinUSB installé par Zadig). Chaque clé doit avoir un numéro de série unique (`rtl_eeprom -s`).
-- Pour un Airspy HF+ : [libairspyhf](https://github.com/airspy/airspyhf/releases) (`airspyhf.dll` sous Windows).
-- Sous Windows, si la bibliothèque n'est pas dans le `PATH`, indiquez son chemin dans `library_path` de la section du pilote (`[hardware.rtlsdr]`, `[hardware.airspyhf]`).
+- Pour une RTL-SDR Blog V4 : librtlsdr de la [branche RTL-SDR Blog](https://github.com/rtlsdrblog/rtl-sdr-blog/releases), et le pilote WinUSB (Zadig) sous Windows. Chaque clé doit avoir un numéro de série unique (`rtl_eeprom -s`).
+- Pour un Airspy HF+ : libairspyhf (sous Windows, `airspyhf.dll` du paquet SDR# d'Airspy).
+- Les installeurs fournissent ces deux bibliothèques. En installation manuelle, indiquez le chemin de la bibliothèque dans `library_path` de la section du pilote (`[hardware.rtlsdr]`, `[hardware.airspyhf]`).
 
 ## Installation
 
-**Debian 12+ / Raspberry Pi OS 64 bits** : installez l'API SDRplay (ou déposez son installeur `.run` dans votre dossier personnel), puis :
+**Debian 12+ / Raspberry Pi OS 64 bits (recommandé pour les campagnes longues)** : installez l'API SDRplay (ou déposez son installeur `.run` dans votre dossier personnel), puis :
 
 ```bash
 sudo ./install/linux/install.sh                        # SDRplay
@@ -36,9 +36,19 @@ sudo ./install/linux/install.sh --sdr rtlsdr           # RTL-SDR Blog V4 (librtl
 sudo ./install/linux/install.sh --sdr airspyhf,rtlsdr  # Airspy principal, plus des RTL-SDR
 ```
 
-Relancé sans `--sdr`, l'installeur reprend les SDR de la configuration existante.
+Relancé sans `--sdr`, l'installeur reprend les SDR de la configuration existante. La station tourne en service systemd (`journalctl -u oav`), redémarre seule et reprend sa campagne. Désinstallation : `sudo ./install/linux/uninstall.sh [--purge]`.
 
-**Windows (développement, en attendant l'installeur de la phase P9)** :
+**Windows 10/11 64 bits** : installez l'API SDRplay si vous avez un SDRplay, puis double-cliquez sur `install\windows\install.cmd` (ou lancez-le avec des options dans une invite de commandes) :
+
+```bat
+install\windows\install.cmd                                :: SDRplay
+install\windows\install.cmd -Sdr rtlsdr                    :: RTL-SDR Blog V4
+install\windows\install.cmd -Sdr airspyhf,rtlsdr -AutoStart
+```
+
+L'installeur installe Python s'il manque (winget). Il télécharge les bibliothèques RTL-SDR et Airspy, dont il vérifie l'empreinte ou la signature, ouvre Zadig si un SDR USB n'a pas le pilote WinUSB, et crée l'icône « openAntennaValidation » sur le bureau. Il n'y a pas de service Windows : l'icône lance la station dans une fenêtre réduite, qui la relance seule après une erreur ; Ctrl+C dans cette fenêtre l'arrête proprement. `-AutoStart` la lance à l'ouverture de session. Pour un fonctionnement d'un mois sans surveillance, préférez Debian. Désinstallation : menu Démarrer, ou `install\windows\uninstall.cmd [-Purge]`.
+
+**Développement (Windows)** :
 
 ```powershell
 py -3.12 -m venv .venv
