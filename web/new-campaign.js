@@ -14,6 +14,7 @@ const ICON = {
 };
 let setup = null;
 let freqs = [];
+let mode = "fixed";
 
 async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -36,15 +37,34 @@ function renderFreqs() {
   update();
 }
 
+function autoRange() {
+  const lo = Number($("fmin").value) * 1000, hi = Number($("fmax").value) * 1000;
+  return lo > 0 && hi > lo ? { lo, hi } : null;
+}
+
 function selected() { return freqs.filter((f) => Number(f.khz) > 0).map((f) => ({ hz: Number(f.khz) * 1000, w: widthOf(f), class: f.class })); }
 
 function update() {
   const rx = setup.receiver;
   const bw = rx.bandwidth_hz || 0;
   const list = selected();
-  // Couverture : fréquences dans la bande utile autour de leur centre.
   const cov = $("coverage");
-  if (list.length && bw) {
+  $("auto-fields").hidden = mode !== "auto";
+  $("fixed-fields").hidden = mode !== "fixed";
+  document.querySelectorAll("#mode button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === mode)));
+  if (mode === "auto") {
+    const r = autoRange();
+    if (r && bw) {
+      const center = (r.lo + r.hi) / 2, fits = r.hi - r.lo + 10_000 <= bw;
+      const pos = (hz) => `${((hz - (center - bw / 2)) / bw) * 100}%`;
+      cov.innerHTML = `<i style="left:${pos(r.lo)};width:${((r.hi - r.lo) / bw) * 100}%;opacity:.35"></i><span class="dc" style="left:50%"></span>`;
+      $("freq-note").textContent = fits
+        ? `Bande de ${NF1.format((r.hi - r.lo) / 1000)} kHz. Le programme relève la bande pendant ${NF0.format(setup.survey_s)} s, choisit jusqu'à ${$("nmax").value || setup.max_signals} signaux (enveloppe constante d'abord, puis stabilité, puis SNR) et un point de bruit, puis réévalue la bande toutes les ${NF0.format(setup.reevaluate_s / 60)} min.`
+        : `La bande fait ${NF1.format((r.hi - r.lo) / 1000)} kHz : elle doit tenir dans ${NF0.format((bw - 10_000) / 1000)} kHz (bande utile moins le voisinage du bruit). Faites plusieurs campagnes.`;
+      $("freq-note").style.color = fits ? "" : "var(--crit-ink)";
+      renderQual(center);
+    } else { cov.innerHTML = ""; $("freq-note").textContent = "Indiquez Fmin et Fmax."; renderQual(null); }
+  } else if (list.length && bw) {
     const low = Math.min(...list.map((f) => f.hz - f.w / 2)), high = Math.max(...list.map((f) => f.hz + f.w / 2));
     const center = (low + high) / 2, span = high - low + 10_000;
     const pos = (hz) => `${((hz - (center - bw / 2)) / bw) * 100}%`;
@@ -62,7 +82,7 @@ function update() {
   const dur = Number($("dur").value) * Number($("unit").value);
   const win = (setup.windows.find(([h]) => dur / 3600 <= h) || setup.windows[setup.windows.length - 1])[1];
   const period = Math.min(setup.period_s, win / 3);
-  const n = Math.max(1, list.length);
+  const n = mode === "auto" ? (Number($("nmax").value) || setup.max_signals) + 1 : Math.max(1, list.length);
   const volume = (dur / period) * n * 2 * 90 + (dur / win) * n * 3 * 260;
   const rate = Number($("rate").value) || setup.rate_hz;
   $("plan").innerHTML = `<dt>Fenêtre d'agrégation</dt><dd>${win >= 60 ? `${win / 60} min` : `${win} s`}</dd>
@@ -99,16 +119,34 @@ $("freqs").addEventListener("click", (e) => { const b = e.target.closest("[data-
 $("add-freq").addEventListener("click", () => { const last = freqs[freqs.length - 1]; freqs.push({ khz: last ? (Number(last.khz) + 5).toFixed(1) : "", class: "carrier" }); renderFreqs(); });
 $("band").addEventListener("change", () => {
   const b = setup.bands.find((x) => x.name === $("band").value);
-  if (b && !selected().length) { freqs = [{ khz: ((b.low_hz + b.high_hz) / 2 / 1000).toFixed(1), class: "carrier" }]; renderFreqs(); }
+  if (!b) return;
+  fillRange(b);
+  if (!selected().length) { freqs = [{ khz: ((b.low_hz + b.high_hz) / 2 / 1000).toFixed(1), class: "carrier" }]; renderFreqs(); }
+  update();
 });
+// Bande proposée : la bande entière si elle tient dans la bande utile, sinon autour du centre écouté.
+function fillRange(b) {
+  const bw = (setup.receiver.bandwidth_hz || 0) - 10_000;
+  let lo = b.low_hz, hi = b.high_hz;
+  if (bw > 0 && hi - lo > bw) {
+    const c = Math.min(Math.max(setup.receiver.center_hz, lo + bw / 2), hi - bw / 2);
+    lo = c - bw / 2; hi = c + bw / 2;
+  }
+  $("fmin").value = (lo / 1000).toFixed(1); $("fmax").value = (hi / 1000).toFixed(1);
+}
+$("mode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { mode = b.dataset.v; update(); } });
+["fmin", "fmax", "nmax"].forEach((id) => $(id).addEventListener("input", update));
 ["dur", "unit", "rate", "aa", "ant-a"].forEach((id) => $(id).addEventListener("input", update));
 
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const aa = $("aa").checked;
+  const r = autoRange();
   const body = {
-    title: $("title").value,
-    frequencies: selected().map((f, i) => ({ freq_hz: f.hz, class: f.class, width_hz: Number(freqs.filter((x) => Number(x.khz) > 0)[i].width_hz) || null })),
+    title: $("title").value, mode,
+    low_hz: mode === "auto" && r ? r.lo : null, high_hz: mode === "auto" && r ? r.hi : null,
+    max_signals: Number($("nmax").value) || null,
+    frequencies: mode === "auto" ? [] : selected().map((f, i) => ({ freq_hz: f.hz, class: f.class, width_hz: Number(freqs.filter((x) => Number(x.khz) > 0)[i].width_hz) || null })),
     channels: [{ antenna_id: Number($("ant-a").value) }, { antenna_id: Number(aa ? $("ant-a").value : $("ant-b").value) }],
     reference: Number($("ref").value), duration_s: Number($("dur").value) * Number($("unit").value),
     rate_hz: Number($("rate").value) || null, aa, accept_limits: $("accept").checked,
@@ -139,7 +177,8 @@ $("form").addEventListener("submit", async (e) => {
     $("band").innerHTML = `<option value="">Choisir…</option>` + setup.bands.map((b) => `<option>${esc(b.name)}</option>`).join("");
     const center = rx.center_hz;
     const band = setup.bands.find((b) => b.low_hz <= center && center <= b.high_hz);
-    if (band) $("band").value = band.name;
+    if (band) { $("band").value = band.name; fillRange(band); }
+    $("nmax").value = setup.max_signals;
     freqs = [{ khz: (center / 1000).toFixed(1), class: "carrier" }];
     renderFreqs();
   } catch (e) { showError(e.message); }

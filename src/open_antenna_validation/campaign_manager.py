@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 
 from open_antenna_validation.config import Config
+from open_antenna_validation.detect import same_signal, select
 from open_antenna_validation.engine import Q_ABSENT, Q_LOST, Q_SATURATION
 from open_antenna_validation.installation import current_chain
 from open_antenna_validation.storage import Database
@@ -102,8 +103,35 @@ def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
     if len(inputs) < 2:
         raise CampaignError("Le mode commuté demande un SDR à plusieurs entrées.")
     title = str(request.get("title", "")).strip()
+    bandwidth = float(receiver.get("bandwidth_hz") or 0)
+    auto = request.get("mode", "fixed") == "auto"
+    max_signals = int(request.get("max_signals") or cfg.campaign.max_signals)
+    if not 1 <= max_signals <= MAX_SIGNALS:
+        raise CampaignError(f"De 1 à {MAX_SIGNALS} signaux suivis.")
 
-    # Frequencies.
+    if auto:
+        low, high = float(request.get("low_hz") or 0), float(request.get("high_hz") or 0)
+        if high <= low:
+            raise CampaignError("Indiquez une bande : Fmin doit être inférieure à Fmax.")
+        if high - low + 2 * NOISE_REACH_HZ > bandwidth:
+            raise CampaignError(
+                f"La bande demandée fait {(high - low) / 1e3:.1f} kHz : elle doit tenir dans la "
+                f"bande utile du SDR ({bandwidth / 1e3:.0f} kHz, moins le voisinage du bruit). "
+                "Faites plusieurs campagnes.")
+        center = (low + high) / 2
+        sdr_hz = center  # detection keeps the signals away from the DC spike
+        signals: list[dict[str, Any]] = []
+    else:
+        low, high, center, sdr_hz, signals = _fixed_frequencies(cfg, request, bandwidth)
+    band = next((b.name for b in cfg.bands if b.low_hz <= center <= b.high_hz), "")
+    if not 1e6 <= center <= 30e6:
+        raise CampaignError("Les fréquences doivent être dans la bande HF (1 à 30 MHz).")
+    return _create(db, cfg, receiver, request, inputs, title, auto, max_signals, low, high,
+                   center, sdr_hz, band, signals)
+
+
+def _fixed_frequencies(cfg: Config, request: dict[str, Any], bandwidth: float
+                       ) -> tuple[float, float, float, float, list[dict[str, Any]]]:
     freqs = request.get("frequencies") or []
     if not freqs:
         raise CampaignError("Indiquez au moins une fréquence à mesurer.")
@@ -118,18 +146,19 @@ def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
         signals.append({"freq_hz": float(f["freq_hz"]), "class": cls, "width_hz": width})
     low = min(s["freq_hz"] - s["width_hz"] / 2 for s in signals)
     high = max(s["freq_hz"] + s["width_hz"] / 2 for s in signals)
-    bandwidth = float(receiver.get("bandwidth_hz") or 0)
     # Keep the noise neighbourhood (5 kHz) inside the usable band too.
     if high - low + 10_000 > bandwidth:
         raise CampaignError(
             f"Les fréquences couvrent {(high - low) / 1e3:.1f} kHz : elles doivent tenir dans la "
             f"bande utile du SDR ({bandwidth / 1e3:.0f} kHz). Faites plusieurs campagnes.")
     center = (low + high) / 2
-    sdr_hz = dc_free_tuning(signals, center, bandwidth)
-    band = next((b.name for b in cfg.bands if b.low_hz <= center <= b.high_hz), "")
-    if not 1e6 <= center <= 30e6:
-        raise CampaignError("Les fréquences doivent être dans la bande HF (1 à 30 MHz).")
+    return low, high, center, dc_free_tuning(signals, center, bandwidth), signals
 
+
+def _create(db: Database, cfg: Config, receiver: dict[str, Any], request: dict[str, Any],
+            inputs: list[str], title: str, auto: bool, max_signals: int, low: float,
+            high: float, center: float, sdr_hz: float, band: str,
+            signals: list[dict[str, Any]]) -> str:
     # Channels.
     aa = bool(request.get("aa"))
     channels = request.get("channels") or []
@@ -171,8 +200,9 @@ def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
     uuid = str(uuidlib.uuid4())
     device = receiver.get("device") or {}
     params = {
-        "aa": aa, "rate_hz": rate_hz, "period_s": period_s, "window_ms": window_ms,
-        "blanking_ms": blanking, "center_hz": center,
+        "aa": aa, "auto": auto, "max_signals": max_signals,
+        "rate_hz": rate_hz, "period_s": period_s, "window_ms": window_ms,
+        "blanking_ms": blanking, "center_hz": center, "low_hz": low, "high_hz": high,
         "sdr_hz": sdr_hz, "sdr": f"{device.get('model', 'SDR')}",
         "identity": receiver.get("identity"), "inputs": inputs[:2],
         "operator": cfg.station.callsign, "locator": cfg.station.locator, "timezone": "",
@@ -184,8 +214,8 @@ def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
             "blanking_ms": profile["blanking_ms"], "useful": profile["useful_fraction"],
             "verdicts": margins_json.get("verdicts", []),
             "aa_campaign": margins_json.get("aa_campaign")},
-        "volume_bytes": estimate_volume_bytes(len(signals), 2, duration_s, period_s,
-                                              window_ms / 1000),
+        "volume_bytes": estimate_volume_bytes(len(signals) or max_signals + 1, 2, duration_s,
+                                              period_s, window_ms / 1000),
         "antennas": [],
     }
     if not title:
@@ -197,8 +227,9 @@ def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
             "INSERT INTO campaigns (uuid, title, callsign, reception_mode, measure_mode, low_hz,"
             " high_hz, band, state, created_ms, start_ms, planned_end_ms, n_channels,"
             " reference_channel, profile_id, visibility, params_json) VALUES"
-            " (?, ?, ?, 'switched', 'fixed', ?, ?, ?, 'running', ?, ?, ?, 2, ?, ?, ?, ?)",
-            (uuid, title, cfg.station.callsign, low, high, band, start, start,
+            " (?, ?, ?, 'switched', ?, ?, ?, ?, 'running', ?, ?, ?, 2, ?, ?, ?, ?)",
+            (uuid, title, cfg.station.callsign, "auto" if auto else "fixed", low, high, band,
+             start, start,
              start + int(duration_s * 1000), reference,
              profile["id"] if profile is not None else None, request.get("visibility", "private"),
              json.dumps(params, ensure_ascii=False)))
@@ -246,6 +277,10 @@ class Running:
     calm: bool = False
     engine_started: bool = False
     interrupted_since: int | None = None
+    auto: bool = False
+    surveying: bool = False
+    last_survey_ms: int | None = None
+    last_ts: int | None = None
     corrections: dict[int, list[float]] = field(default_factory=dict)
 
 
@@ -257,30 +292,46 @@ def load_running(db: Database) -> Running | None:
     c = rows[0]
     params = json.loads(c["params_json"])
     signals = [dict(r) for r in db.query(
-        "SELECT id, freq_hz, class, width_hz FROM signals WHERE campaign_id = ? ORDER BY id",
-        (c["id"],))]
+        "SELECT id, freq_hz, class, width_hz FROM signals WHERE campaign_id = ?"
+        " AND valid_to_ms IS NULL ORDER BY id", (c["id"],))]
     run = Running(uuid=c["uuid"], id=int(c["id"]), planned_end_ms=int(c["planned_end_ms"]),
                   window_ms=int(params["window_ms"]), reference=int(c["reference_channel"]),
                   n_ch=int(c["n_channels"]), params=params, signals=signals,
-                  last_present_ms=int(c["start_ms"]))
-    corr = params.get("correction") or {}
-    for s in signals:
-        port = _interp(corr.get("freqs_hz", []), corr.get("port_db", []), s["freq_hz"])
-        # port = A - B on the same signal: B reads low by port, A is the scale of reference.
-        run.corrections[int(s["id"])] = [0.0 if params["inputs"][k] == "A" else port
-                                         for k in range(run.n_ch)]
+                  last_present_ms=int(c["start_ms"]), auto=c["measure_mode"] == "auto")
+    last_ts = db.query("SELECT MAX(ts_ms) FROM measurements WHERE campaign_id = ?",
+                       (run.id,))[0][0]
+    run.last_ts = int(last_ts) if last_ts is not None else None
+    _set_corrections(run)
     last = db.query("SELECT MAX(window_start_ms) FROM aggregates WHERE campaign_id = ?",
                     (run.id,))[0][0]
     run.window_start = None if last is None else int(last) + run.window_ms
     return run
 
 
+def _set_corrections(run: Running) -> None:
+    params, signals = run.params, run.signals
+    corr = params.get("correction") or {}
+    for s in signals:
+        port = _interp(corr.get("freqs_hz", []), corr.get("port_db", []), s["freq_hz"])
+        # port = A - B on the same signal: B reads low by port, A is the scale of reference.
+        run.corrections[int(s["id"])] = [0.0 if params["inputs"][k] == "A" else port
+                                         for k in range(run.n_ch)]
+
+
+def period_s(run: Running, cfg: Config) -> float:
+    """Measurement period: slower while the band is calm."""
+    normal = float(run.params["period_s"])
+    return max(normal, cfg.campaign.calm_period_s) if run.calm else normal
+
+
 def engine_spec(run: Running, cfg: Config) -> dict[str, Any]:
     p = run.params
+    period = period_s(run, cfg)
+    start = 0 if run.last_ts is None else run.last_ts + int(p["period_s"] * 1000)
     return {
         "campaign": run.uuid, "inputs": p["inputs"], "rate_hz": p["rate_hz"],
         "blanking_ms": p["blanking_ms"], "fft_size": cfg.spectrum.fft_size,
-        "period_s": p["period_s"], "clip_threshold": cfg.spectrum.clip_threshold,
+        "period_s": period, "start_ms": start, "clip_threshold": cfg.spectrum.clip_threshold,
         "clip_alert_ratio": cfg.spectrum.clip_alert_ratio, "center_hz": p["center_hz"],
         "sdr_hz": p["sdr_hz"], "display_points": cfg.spectrum.display_points,
         "signals": [{"id": s["id"], "offset_hz": s["freq_hz"] - p["sdr_hz"],
@@ -288,8 +339,56 @@ def engine_spec(run: Running, cfg: Config) -> dict[str, Any]:
     }
 
 
+def survey_request(run: Running, cfg: Config) -> dict[str, Any]:
+    c = run.params
+    return {"campaign": run.uuid, "sdr_hz": c["sdr_hz"], "low_hz": c["low_hz"],
+            "high_hz": c["high_hz"], "seconds": cfg.campaign.survey_s,
+            "fft_size": cfg.spectrum.fft_size, "detect_db": cfg.campaign.detect_db,
+            "class_width_hz": cfg.campaign.class_width_hz}
+
+
+def apply_survey(db: Database, run: Running, result: dict[str, Any], ts: int) -> dict[str, Any]:
+    """New signal set after a survey: keep what is still there, close what vanished, add the
+    best new signals up to the limit, and keep one noise point."""
+    candidates = result.get("candidates", [])
+    existing = [s for s in run.signals if s["class"] != "noise"]
+    noise = [s for s in run.signals if s["class"] == "noise"]
+    kept = [s for s in existing if any(same_signal(s, c) for c in candidates)]
+    closed = [s for s in existing if s not in kept]
+    fresh = [c for c in candidates if not any(same_signal(c, k) for k in kept)]
+    added = select(fresh, int(run.params["max_signals"]), already=kept)
+    quiet = result.get("quiet")
+    for n in noise:
+        if any(abs(n["freq_hz"] - a["freq_hz"]) < (n["width_hz"] + a["width_hz"]) / 2
+               for a in added):
+            closed.append(n)
+            noise = []
+    if not noise and quiet:
+        added.append(quiet)
+    with db.transaction() as conn:
+        for s in closed:
+            conn.execute("UPDATE signals SET valid_to_ms = ? WHERE id = ?", (ts, s["id"]))
+        for s in added:
+            conn.execute(
+                "INSERT INTO signals (campaign_id, freq_hz, class, width_hz, source,"
+                " valid_from_ms) VALUES (?, ?, ?, ?, 'auto', ?)",
+                (run.id, s["freq_hz"], s["class"], s["width_hz"], ts))
+    run.signals = [dict(r) for r in db.query(
+        "SELECT id, freq_hz, class, width_hz FROM signals WHERE campaign_id = ?"
+        " AND valid_to_ms IS NULL ORDER BY id", (run.id,))]
+    _set_corrections(run)
+    run.last_survey_ms = ts
+    summary = {"campaign": run.uuid, "found": len(candidates), "kept": len(kept),
+               "added": len([a for a in added if a["class"] != "noise"]),
+               "closed": len([c for c in closed if c["class"] != "noise"]),
+               "floor_dbfs": result.get("floor_dbfs")}
+    db.log_event("survey", summary)
+    return summary
+
+
 def store_measurements(db: Database, cfg: Config, run: Running, event: dict[str, Any]) -> None:
     ts = int(event["ts_ms"])
+    run.last_ts = ts
     rows = []
     present = False
     for sid, ch, rssi, floor, quality, _n in event["values"]:

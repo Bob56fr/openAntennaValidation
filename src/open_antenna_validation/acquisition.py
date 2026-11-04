@@ -24,7 +24,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
-from open_antenna_validation import bench
+from open_antenna_validation import bench, detect
 from open_antenna_validation.config import HardwareConfig, ReceiverConfig, SpectrumConfig
 from open_antenna_validation.dsp.measure import Spectrum, clipping_ratio, db
 from open_antenna_validation.engine import CampaignRunner
@@ -154,6 +154,9 @@ def run_acquisition(
                             runner = None
                             events.put({"type": "campaign_error", "campaign": value["campaign"],
                                         "message": str(exc)})
+                    elif name == "survey":
+                        runner = None  # the survey replaces the measurement while it runs
+                        events.put(run_survey(driver, value))
                     elif name == "campaign_stop":
                         runner = None
                         driver.set_antenna(antenna)
@@ -213,6 +216,21 @@ def run_acquisition(
     finally:
         driver.shutdown()
         events.put({"type": "closed"})
+
+
+def run_survey(driver: SdrDriver, request: dict[str, Any]) -> Event:
+    """Survey of the band of an automatic campaign, then detection (in the worker)."""
+    try:
+        driver.set_frequency(float(request["sdr_hz"]))
+        raw = detect.survey(driver, float(request["seconds"]), int(request["fft_size"]))
+        result = detect.detect(
+            raw["grams"], raw["rate"], raw["fft_size"], raw["sdr_hz"],
+            low_hz=float(request["low_hz"]), high_hz=float(request["high_hz"]),
+            usable_hz=driver.instant_bandwidth(), detect_db=float(request["detect_db"]),
+            class_width_hz=request.get("class_width_hz"))
+    except HardwareError as exc:
+        return {"type": "survey_error", "campaign": request["campaign"], "message": str(exc)}
+    return {"type": "survey_result", "campaign": request["campaign"], "result": result}
 
 
 def run_bench_step(driver: SdrDriver, request: dict[str, Any]) -> Event:

@@ -166,6 +166,12 @@ presence_db = 6.0             # signal présent s'il dépasse son plancher local
 calm_after_s = 300.0          # bande calme si aucun signal présent pendant N s
 default_blanking_ms = 5.0     # neutralisation après bascule sans profil de qualification
 max_duration_days = 31.0
+survey_s = 60.0               # bande automatique : durée du relevé de la bande
+detect_db = 8.0               # signal détecté s'il dépasse le plancher local de N dB
+max_signals = 8               # signaux suivis au plus
+reevaluate_s = 3600.0         # nouveau relevé de la bande toutes les N s
+calm_probe_s = 300.0          # bande calme : nouveau relevé toutes les N s…
+calm_period_s = 60.0          # …et une mesure toutes les N s seulement
 # (durée de campagne jusqu'à N heures, fenêtre d'agrégation en secondes)
 windows = [[1.0, 10.0], [24.0, 60.0], [168.0, 300.0], [1000000000.0, 900.0]]
 

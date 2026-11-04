@@ -28,7 +28,11 @@ class ChannelBody(BaseModel):
 
 class CampaignBody(BaseModel):
     title: str = ""
-    frequencies: list[FrequencyBody]
+    mode: Literal["fixed", "auto"] = "fixed"
+    frequencies: list[FrequencyBody] = Field(default_factory=list)
+    low_hz: float | None = Field(default=None, gt=0)
+    high_hz: float | None = Field(default=None, gt=0)
+    max_signals: int | None = Field(default=None, ge=1, le=20)
     channels: list[ChannelBody]
     reference: int = 0
     duration_s: float
@@ -64,6 +68,8 @@ def build_router(station: Station) -> APIRouter:
             "period_s": cfg.campaign.period_s,
             "windows": cfg.campaign.windows,
             "max_duration_days": cfg.campaign.max_duration_days,
+            "max_signals": cfg.campaign.max_signals, "survey_s": cfg.campaign.survey_s,
+            "reevaluate_s": cfg.campaign.reevaluate_s,
             "profiles": {b.name: profile_summary(b.name) for b in cfg.bands},
             "disk_free_bytes": free,
             "campaign": station.campaign_report(),

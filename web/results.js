@@ -68,6 +68,9 @@ const state = { metric: "rssi", view: "installation", cls: "all", ref: 0, cmp: 1
 
 function prepare(results) {
   R = results;
+  // The noise point measures the floor all along: kept apart from the signals.
+  R.noise = R.signals.filter((s) => s.class === "noise");
+  R.signals = R.signals.filter((s) => s.class !== "noise");
   STATION = locatorToLatLon(R.campaign.locator);
   TZ = R.campaign.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   fmtDay = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, weekday: "short", day: "numeric", month: "short" });
@@ -117,16 +120,27 @@ function rawValue(rssi, floor, a, i, metric, view) {
   if (metric === "rssi") return rssi == null ? null : rssi + off;
   return floor == null ? null : floor + off;
 }
+// "Toutes classes" : moyenne des classes mesurées dans la fenêtre. Un signal intermittent
+// (FT8 un créneau sur deux) ne doit pas vider la fenêtre.
 function value(a, c, i, metric = state.metric, view = state.view) {
   if (c === "all") {
     let s = 0, n = 0;
-    for (const cc of CLASSES) { if (!CL[cc]) continue; const v = value(a, cc, i, metric, view); if (v == null) return null; s += v; n++; }
+    for (const cc of CLASSES) { if (!CL[cc]) continue; const v = value(a, cc, i, metric, view); if (v != null) { s += v; n++; } }
     return n ? s / n : null;
   }
   if (!CL[c]) return null;
   return rawValue(CL[c].rssi[a.k][i], CL[c].floor[a.k][i], a, i, metric, view);
 }
-const delta = (a, b, i, metric = state.metric) => { const va = value(a, state.cls, i, metric), vb = value(b, state.cls, i, metric); return va == null || vb == null ? null : va - vb; };
+// Écart : par classe d'abord (les deux antennes sur les mêmes signaux), puis moyenne.
+function delta(a, b, i, metric = state.metric) {
+  const classes = state.cls === "all" ? CLASSES : [state.cls];
+  let s = 0, n = 0;
+  for (const c of classes) {
+    const va = value(a, c, i, metric), vb = value(b, c, i, metric);
+    if (va != null && vb != null) { s += va - vb; n++; }
+  }
+  return n ? s / n : null;
+}
 const better = (v) => (state.metric === "noise" ? -v : v);
 
 /* ---------- Thème ---------- */

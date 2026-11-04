@@ -6,7 +6,7 @@ Compare la réception de deux à dix antennes HF en mesurant, sur les mêmes sig
 - Décisions et écarts : [docs/decisions.md](docs/decisions.md)
 - Maquettes de l'interface : [design/](design/)
 
-État : phase P3. Une station en mode commuté (un SDR à deux entrées) qualifie sa commutation, décrit ses antennes et leurs chaînes, puis mène des campagnes de mesure sur des fréquences imposées, de 1 minute à 1 mois, consultables pendant et après la mesure. Le choix automatique des signaux arrive avec la phase P4, le mode simultané (plusieurs SDR) avec la phase P5.
+État : phase P3. Une station en mode commuté (un SDR à deux entrées) qualifie sa commutation, décrit ses antennes et leurs chaînes, puis mène des campagnes de mesure sur des fréquences imposées, de 1 minute à 1 mois, consultables pendant et après la mesure. En bande automatique, le programme relève la bande, choisit lui-même ses signaux et les réévalue. Le mode simultané (plusieurs SDR) arrive avec la phase P5.
 
 ## Deux façons de comparer
 

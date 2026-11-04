@@ -120,13 +120,14 @@ function renderCampaign(c) {
   const now = c.last_ms || Date.now();
   const total = c.planned_end_ms - c.start_ms;
   const done = Math.min(1, Math.max(0, (now - c.start_ms) / total));
-  const state = c.state === "interrupted" ? ["Interrompue", "bad"] : c.calm ? ["Bande calme", ""] : ["Bande active", "ok"];
-  $("camp-eyebrow").textContent = `Campagne en cours${c.aa ? " · A/A" : ""} · mode commuté`;
+  const state = c.state === "interrupted" ? ["Interrompue", "bad"] : c.surveying ? ["Relevé de la bande", "warn"]
+    : c.calm ? ["Bande calme", ""] : ["Bande active", "ok"];
+  $("camp-eyebrow").textContent = `Campagne en cours${c.aa ? " · A/A" : ""} · mode commuté · ${c.auto ? "bande automatique" : "fréquences imposées"}`;
   $("camp-title").textContent = c.title;
   $("camp-pill").className = `pill ${state[1]}`; $("camp-word").textContent = state[0];
   $("camp-results").href = `/campaign?id=${encodeURIComponent(c.uuid)}`;
   $("camp-progress").style.width = `${Math.round(done * 100)}%`;
-  $("camp-meta").innerHTML = `<span>${c.signals} fréquence${c.signals > 1 ? "s" : ""} · commutation ${c.rate_hz} Hz</span>
+  $("camp-meta").innerHTML = `<span>${c.signals} ${c.auto ? "signal" : "fréquence"}${c.signals > 1 ? "s" : ""} suivi${c.auto && c.signals > 1 ? "s" : ""} · commutation ${c.rate_hz} Hz</span>
     <span>${Math.round(done * 100)} % · ${duration(now - c.start_ms)} écoulées, reste ${duration(c.planned_end_ms - now)}</span>
     <span>Fin prévue ${fmtWhen.format(c.planned_end_ms)}</span>`;
 }

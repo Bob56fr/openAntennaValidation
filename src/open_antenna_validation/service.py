@@ -173,7 +173,11 @@ class Station:
         run = self.campaign
         if run is None or self.receiver.get("state") != "running":
             return
-        self._send("campaign_start", cm.engine_spec(run, self.config))
+        if run.auto and run.last_survey_ms is None:
+            # First start, or after a restart: survey the band before measuring.
+            self._start_survey()
+        else:
+            self._send("campaign_start", cm.engine_spec(run, self.config))
         if run.interrupted_since is not None:
             run.interrupted_since = None
             run.calm = False
@@ -183,6 +187,31 @@ class Station:
                 conn.execute("UPDATE campaigns SET state = 'running' WHERE id = ?", (run.id,))
         # Last: whoever sees the engine started sees the campaign running in the database.
         run.engine_started = True
+
+    def _start_survey(self) -> None:
+        run = self.campaign
+        if run is None:
+            return
+        run.surveying = True
+        self._send("survey", cm.survey_request(run, self.config))
+        self._publish_status()
+
+    def _on_survey(self, event: Event) -> None:
+        with self._campaign_lock:
+            run = self.campaign
+            if run is None or event.get("campaign") != run.uuid:
+                return
+            run.surveying = False
+            ts = max(now_ms(), (run.last_ts or 0) + int(run.params["period_s"] * 1000))
+            if event["type"] == "survey_result":
+                summary = cm.apply_survey(self.db, run, event["result"], ts)
+                log.info("Relevé de la bande : %s", summary)
+            else:
+                run.last_survey_ms = ts  # retried at the next re-evaluation
+                self.db.log_event("error", {"survey": run.uuid, "message": event["message"]})
+            if self.receiver.get("state") == "running":
+                self._send("campaign_start", cm.engine_spec(run, self.config))
+        self._publish_status()
 
     def start_campaign(self, request: dict[str, Any]) -> str:
         with self._campaign_lock:
@@ -210,14 +239,23 @@ class Station:
             run = self.campaign
             if run is None or event.get("campaign") != run.uuid:
                 return
+            calm_before = run.calm
             cm.store_measurements(self.db, self.config, run, event)
-            if int(event["ts_ms"]) + int(event["period_ms"]) >= run.planned_end_ms:
+            ts = int(event["ts_ms"])
+            if ts + int(event["period_ms"]) >= run.planned_end_ms:
                 if self.receiver.get("state") == "running":
                     self._send("campaign_stop", None)
                 # Closed in the database first: whoever sees no campaign sees it finished.
                 cm.finish(self.db, run, "done", run.planned_end_ms)
                 self.campaign = None
                 log.info("Campagne %s terminée", run.uuid)
+            elif run.auto and not run.surveying and run.last_survey_ms is not None and (
+                ts - run.last_survey_ms >= 1000 * (self.config.campaign.calm_probe_s if run.calm
+                                                   else self.config.campaign.reevaluate_s)):
+                self._start_survey()
+            elif run.calm != calm_before and self.receiver.get("state") == "running":
+                # Calm band: slower measurements (and back to normal when it wakes up).
+                self._send("campaign_start", cm.engine_spec(run, self.config))
         self._publish_status()
 
     def campaign_report(self) -> dict[str, Any] | None:
@@ -231,7 +269,9 @@ class Station:
         return {"uuid": run.uuid, "title": row["title"], "state": row["state"],
                 "start_ms": row["start_ms"], "planned_end_ms": row["planned_end_ms"],
                 "last_ms": last, "calm": run.calm, "aa": bool(run.params.get("aa")),
-                "signals": len(run.signals), "rate_hz": run.params["rate_hz"]}
+                "signals": len([s for s in run.signals if s["class"] != "noise"]),
+                "rate_hz": run.params["rate_hz"], "auto": run.auto,
+                "surveying": run.surveying, "last_survey_ms": run.last_survey_ms}
 
     # --- events from the worker --------------------------------------------------
 
@@ -270,6 +310,8 @@ class Station:
             self._publish_status()
         elif kind == "measurement":
             self._on_measurement(event)
+        elif kind in ("survey_result", "survey_error"):
+            self._on_survey(event)
         elif kind == "campaign_error":
             log.error("Campagne : %s", event["message"])
             self.db.log_event("error", {"campaign": event["campaign"],

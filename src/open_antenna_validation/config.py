@@ -196,6 +196,14 @@ class CampaignConfig(_Section):
     default_blanking_ms: float = Field(default=5.0, ge=0.0, le=50.0)
     windows: list[tuple[float, float]] = Field(default_factory=_default_windows)
     max_duration_days: float = Field(default=31.0, gt=0.0)
+    # Automatic band mode: survey, detection, re-evaluation (section 8).
+    survey_s: float = Field(default=60.0, ge=5.0, le=600.0)
+    detect_db: float = Field(default=8.0, gt=0.0)
+    max_signals: int = Field(default=8, ge=1, le=20)
+    reevaluate_s: float = Field(default=3600.0, ge=10.0)
+    # Band calm: re-survey this often (automatic mode) and measure at this slower period.
+    calm_probe_s: float = Field(default=300.0, ge=10.0)
+    calm_period_s: float = Field(default=60.0, ge=1.0, le=600.0)
 
 
 class DemoConfig(_Section):

@@ -52,7 +52,8 @@ class CampaignRunner:
             raise ValueError("Durée utile par entrée trop courte pour mesurer.")
         self.spectrum = Spectrum(self.fft, self.rate)
         self.period = int(spec["period_s"] * self.rate)
-        self.start_ms = start_ms
+        # Continuity after a restart (new signals, calm period): never before the last period.
+        self.start_ms = max(start_ms, int(spec.get("start_ms") or 0))
         self.samples = 0
         self.next_emit = self.period
         self.clip_threshold = float(spec["clip_threshold"])
