@@ -34,3 +34,4 @@ wordpress/open-antenna-validation/assets/antenna-types.json
 wordpress/open-antenna-validation/templates/
 wordpress/dist/
 wordpress/dev/.admin-password
+.pytest_tmp_loop/
