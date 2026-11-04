@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Campagne · openAntennaValidation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/results.css">
+  <script src="/static/theme.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M2 15 Q6 4 11 11 T20 7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/><path d="M2 18 Q7 9 11 14 T20 12" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linecap="round"/></svg>openAntennaValidation</div>
+      <nav class="tabs" aria-label="Station">
+        <a href="/">Tableau de bord</a>
+        <a href="/campaigns" aria-current="page">Campagnes</a>
+        <span class="soon" title="Phase P2">Qualification</span>
+        <span class="soon" title="Phase P3">Installation</span>
+      </nav>
+      <div class="right"><button class="linkbtn" type="button" onclick="toggleTheme()">Thème</button></div>
+    </div>
+  </header>
+
+  <div class="wrap head">
+    <div class="demo-banner" id="demo-banner" hidden><b>Campagne de démonstration, données simulées.</b> Elle montre la présentation des résultats en attendant une vraie campagne ; elle disparaîtra dès la première campagne enregistrée.</div>
+    <div class="eyebrow" id="head-eyebrow"></div>
+    <h1 id="head-title"></h1>
+    <div class="meta" id="head-meta"></div>
+  </div>
+
+  <div class="rcontrols">
+    <div class="wrap">
+      <div class="ctl"><span class="eyebrow">Grandeur</span>
+        <div class="seg" data-key="metric"><button data-v="rssi" aria-pressed="true">RSSI</button><button data-v="noise" aria-pressed="false">Bruit</button><button data-v="snr" aria-pressed="false">SNR</button></div>
+      </div>
+      <div class="ctl"><span class="eyebrow">Vue</span>
+        <div class="seg" data-key="view"><button data-v="installation" aria-pressed="true">Installation</button><button data-v="antenne" aria-pressed="false">Antenne</button></div>
+      </div>
+      <div class="ctl"><span class="eyebrow">Classe de signal</span>
+        <div class="seg" data-key="cls"><button data-v="all" aria-pressed="true">Toutes</button><button data-v="carrier" aria-pressed="false">Porteuse/CW</button><button data-v="digital" aria-pressed="false">Numérique</button><button data-v="ssb" aria-pressed="false">SSB</button></div>
+      </div>
+      <div class="ctl"><label class="eyebrow" for="sel-ref">Référence</label><select id="sel-ref"></select></div>
+      <div class="ctl"><label class="eyebrow" for="sel-cmp">Comparée</label><select id="sel-cmp"></select></div>
+      <div class="hint" id="view-hint"></div>
+    </div>
+  </div>
+
+  <main class="wrap" style="padding-top:26px">
+    <div class="banner error" id="error" hidden></div>
+    <div class="summary">
+      <div class="verdict">
+        <div class="eyebrow">Résumé</div>
+        <p id="verdict-main"></p>
+        <p class="second" id="verdict-second"></p>
+        <div class="auto">Phrases rédigées automatiquement ; seuls les écarts supérieurs à la marge de qualification et à l'intervalle de confiance sont affirmés.</div>
+      </div>
+      <div class="rtiles" id="tiles"></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><h2>Propagation</h2><p>Tous les jours de la campagne superposés selon l'heure solaire de la station.</p></div>
+      <div class="card">
+        <div class="card-head">
+          <div><h3 id="t-profile">Écart sur 24 heures</h3><p class="desc" id="d-profile"></p></div>
+          <button class="linkbtn" id="btn-table" aria-expanded="false" aria-controls="profile-table">Afficher le tableau</button>
+        </div>
+        <div class="key" id="key-profile"></div>
+        <div id="c-profile" class="chart h-xl" role="img" aria-label="Écart en fonction de l'heure solaire"></div>
+        <div class="tbl-wrap" id="profile-table" hidden></div>
+      </div>
+      <div class="card" id="card-rank" hidden>
+        <div><h3>Meilleure antenne heure par heure</h3><p class="desc" id="d-rank"></p></div>
+        <div id="c-rank" class="chart h-xs" role="img" aria-label="Meilleure antenne par heure solaire"></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><div><h3>Par période du jour</h3><p class="desc" id="d-box"></p></div>
+          <div id="c-box" class="chart h-l" role="img" aria-label="Boîtes à moustaches par période"></div></div>
+        <div class="card"><div><h3>Jour par jour</h3><p class="desc" id="d-heat"></p></div>
+          <div id="c-heat" class="chart h-l" role="img" aria-label="Carte de chaleur jour par heure"></div></div>
+      </div>
+    </section>
+
+    <section id="sec-pairs" hidden>
+      <div class="sec-head"><h2>Toutes les paires</h2><p>Écart médian ligne − colonne. Les cases grises ne sont pas significatives après correction de Holm.</p></div>
+      <div class="card">
+        <div class="card-head">
+          <div><h3>Matrice des écarts</h3><p class="desc" id="d-pairs"></p></div>
+          <div class="seg" data-key="pairsPeriod"><button data-v="jour" aria-pressed="true">Jour</button><button data-v="nuit" aria-pressed="false">Nuit</button></div>
+        </div>
+        <div id="c-pairs" class="chart h-l" role="img" aria-label="Matrice des écarts entre paires d'antennes"></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Dans le temps</h2><p id="time-sub"></p></div>
+      <div class="card"><div><h3 id="t-dts">Écart mesuré</h3><p class="desc" id="d-dts"></p></div>
+        <div id="c-dts" class="chart h-m" role="img" aria-label="Écart dans le temps"></div></div>
+      <div class="card"><div><h3 id="t-lvl">Niveaux reçus</h3><p class="desc" id="d-lvl"></p></div>
+        <div id="c-lvl" class="chart h-m" role="img" aria-label="Niveaux par antenne dans le temps"></div></div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Par signal</h2><p>Signaux retenus dans la bande.</p></div>
+      <div class="grid2">
+        <div class="card"><div><h3 id="t-sig">Écart par signal</h3><p class="desc">Médiane de jour (point plein) et de nuit (point creux).</p></div>
+          <div id="c-sig" class="chart h-l" role="img" aria-label="Écart par signal, jour et nuit"></div></div>
+        <div class="card"><div><h3>Activité de la bande</h3><p class="desc">Nombre moyen de signaux mesurés par heure locale.</p></div>
+          <div id="c-act" class="chart h-l" role="img" aria-label="Activité de la bande par heure"></div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Installation</h2><p id="inst-sub"></p></div>
+      <div class="ants" id="ants"></div>
+      <div class="note" id="coupling-note"></div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Qualification</h2></div>
+      <div class="card"><div><h3>Qualification A/A</h3><p class="desc" id="d-qual"></p></div>
+        <ul class="verd-list" id="qual-list"></ul></div>
+    </section>
+  </main>
+
+  <footer><div class="wrap">openAntennaValidation, logiciel libre (GPLv3).</div></footer>
+  <script src="/static/vendor/echarts.min.js"></script>
+  <script src="/static/results.js"></script>
+</body>
+</html>

@@ -16,9 +16,11 @@ from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSock
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from open_antenna_validation import __version__
+from open_antenna_validation.campaigns import CampaignNotFound, campaign_results, list_campaigns
 from open_antenna_validation.config import Antenna
 from open_antenna_validation.hardware import HardwareError
 from open_antenna_validation.service import TOPIC_SPECTRUM, TOPIC_STATUS, Station
@@ -89,6 +91,7 @@ def create_app(station: Station, *, run_lifecycle: bool = True) -> FastAPI:
         same_site="strict",
         https_only=web.https_only,
     )
+    app.add_middleware(GZipMiddleware, minimum_size=2048)
     root = static_dir()
 
     @app.get("/", include_in_schema=False)
@@ -96,6 +99,19 @@ def create_app(station: Station, *, run_lifecycle: bool = True) -> FastAPI:
         if not is_authenticated(request):
             return RedirectResponse("/login", status_code=303)
         return FileResponse(root / "index.html")
+
+    def page(request: Request, name: str) -> Response:
+        if not is_authenticated(request):
+            return RedirectResponse("/login", status_code=303)
+        return FileResponse(root / name)
+
+    @app.get("/campaigns", include_in_schema=False)
+    def campaigns_page(request: Request) -> Response:
+        return page(request, "campaigns.html")
+
+    @app.get("/campaign", include_in_schema=False)
+    def campaign_page(request: Request) -> Response:
+        return page(request, "campaign.html")
 
     @app.get("/login", include_in_schema=False)
     def login_page() -> FileResponse:
@@ -157,6 +173,17 @@ def create_app(station: Station, *, run_lifecycle: bool = True) -> FastAPI:
     @app.get("/api/bands", dependencies=[Depends(require_auth)])
     def bands() -> list[dict[str, Any]]:
         return [b.model_dump() for b in station.config.bands]
+
+    @app.get("/api/campaigns", dependencies=[Depends(require_auth)])
+    def campaigns() -> list[dict[str, Any]]:
+        return list_campaigns(station.db, show_demo=station.config.demo.enabled)
+
+    @app.get("/api/campaigns/{uuid}/results", dependencies=[Depends(require_auth)])
+    def results(uuid: str) -> dict[str, Any]:
+        try:
+            return campaign_results(station.db, uuid)
+        except CampaignNotFound as exc:
+            raise HTTPException(status_code=404, detail="Campagne introuvable.") from exc
 
     async def stream(websocket: WebSocket, topic: str, first: Any) -> None:
         if not websocket.session.get(SESSION_KEY):

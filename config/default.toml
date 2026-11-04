@@ -140,6 +140,9 @@ low_hz = 28000000.0
 high_hz = 29700000.0
 note = ""
 
+[demo]
+enabled = true                # campagnes de démonstration tant qu'aucune vraie campagne n'existe
+
 [web]
 host = "0.0.0.0"              # réseau local ; ne pas exposer directement sur Internet
 port = 8660

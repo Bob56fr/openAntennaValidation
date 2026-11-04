@@ -19,6 +19,7 @@ from open_antenna_validation.config import (
     resolve_path,
     save_config,
 )
+from open_antenna_validation.demo import ensure_demo_campaigns
 from open_antenna_validation.hardware import DeviceInfo, HardwareError, SdrDriver
 from open_antenna_validation.hardware import create_driver as default_factory
 from open_antenna_validation.hardware.identity import IdentityCheck, record_hardware
@@ -87,6 +88,8 @@ class Station:
 
     def startup(self) -> None:
         self.db.log_event("service_start", {"version": __version__})
+        if self.config.demo.enabled and ensure_demo_campaigns(self.db):
+            log.info("Campagnes de démonstration créées")
         self._running = True
         self._start_acquisition()
 

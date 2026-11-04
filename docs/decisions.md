@@ -44,3 +44,12 @@ Le site WordPress et la page locale montrent une campagne fictive, construite co
 ## D10 — Consultation sans matériel (2026-11-04, demande de l'utilisateur)
 
 Le service et la page locale fonctionnent sans SDR branché (cahier des charges, section 16). L'acquisition vérifie la présence du SDR avant de l'ouvrir ; s'il manque, l'état devient « absent » (et non « erreur »), la détection est relancée de 5 s en doublant jusqu'à 1 min, et le journal ne garde que les changements d'état. Les commandes du récepteur répondent 400 tant qu'il n'est pas en marche ; tout le reste de l'API et des pages reste servi.
+
+## D11 — Campagnes de démonstration et page de résultats avancées avant P2 (2026-11-04, demande de l'utilisateur)
+
+Pour tester la mise en page sans matériel, une partie de P6 est réalisée dès maintenant :
+
+- `demo.py` écrit deux campagnes fictives (40 m, 5 jours, 2 et 6 antennes) dans le schéma définitif : antennes, chaînes et pertes, campagne, voies, deux segments (coax de B remplacé), signaux, agrégats par fenêtre de 15 min, activité. Création au démarrage du service, une seule fois (`[demo] enabled`).
+- `campaigns.py` définit le **format d'échange des résultats** (`/api/campaigns/{uuid}/results`) : par signal et par voie, les médianes par fenêtre telles que mesurées au SDR ; la page ajoute les pertes de chaîne du segment pour la vue Antenne. Ce format servira aussi au plugin WordPress.
+- Pages `/campaigns` et `/campaign?id=…` : portage de la maquette P0 sur l'API ; `results.css` et `results.js` sont prévus pour être repris par le plugin.
+- Restent pour P6 : tableau des mesures exclues (codes qualité), export CSV, pistes FT8 (P10). Les intervalles de confiance utilisent encore l'approximation de la maquette (taille effective n/8), le bootstrap par blocs viendra avec les vraies campagnes.

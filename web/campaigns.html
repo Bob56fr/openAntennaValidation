@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Campagnes · openAntennaValidation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/results.css">
+  <script src="/static/theme.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M2 15 Q6 4 11 11 T20 7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/><path d="M2 18 Q7 9 11 14 T20 12" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linecap="round"/></svg>openAntennaValidation</div>
+      <nav class="tabs" aria-label="Station">
+        <a href="/">Tableau de bord</a>
+        <a href="/campaigns" aria-current="page">Campagnes</a>
+        <span class="soon" title="Phase P2">Qualification</span>
+        <span class="soon" title="Phase P3">Installation</span>
+      </nav>
+      <div class="right"><button class="linkbtn" type="button" onclick="toggleTheme()">Thème</button></div>
+    </div>
+  </header>
+  <div class="wrap head">
+    <div class="eyebrow">Station</div>
+    <h1>Campagnes de mesure</h1>
+    <div class="meta" id="count"></div>
+  </div>
+  <main class="wrap">
+    <div class="demo-banner" id="demo-note" hidden><b>Aucune campagne enregistrée pour l'instant.</b> Les campagnes ci-dessous sont des démonstrations à données simulées : elles montrent la présentation des résultats et disparaîtront dès la première vraie campagne.</div>
+    <div class="clist" id="list"></div>
+  </main>
+  <footer><div class="wrap">openAntennaValidation, logiciel libre (GPLv3).</div></footer>
+  <script>
+  "use strict";
+  (async function () {
+    const res = await fetch("/api/campaigns");
+    if (res.status === 401) { location.replace("/login"); return; }
+    const items = await res.json();
+    const fmt = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+    const STATE = { done: "Terminée", running: "En cours", interrupted: "Interrompue", abandoned: "Abandonnée", preparation: "En préparation" };
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    document.getElementById("demo-note").hidden = !items.length || !items.every((c) => c.demo);
+    document.getElementById("count").textContent = items.length ? `${items.length} campagne${items.length > 1 ? "s" : ""}` : "Aucune campagne.";
+    document.getElementById("list").innerHTML = items.map((c) => {
+      const days = c.end_ms && c.start_ms ? Math.round((c.end_ms - c.start_ms) / 864e5) : null;
+      return `<a class="camp" href="/campaign?id=${encodeURIComponent(c.uuid)}">
+        <div><div class="b">${esc(c.band)}</div><div class="f">${(c.low_hz / 1e6).toFixed(3).replace(".", ",")}–${(c.high_hz / 1e6).toFixed(3).replace(".", ",")}</div></div>
+        <div style="display:grid;gap:4px;min-width:0">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><h3>${esc(c.title)}</h3>${c.demo ? '<span class="tag demo">Démonstration</span>' : ""}<span class="tag">${STATE[c.state] || esc(c.state)}</span></div>
+          <div class="meta"><span>${c.n_channels} antennes : ${esc(c.antenna_types.join(", "))}</span><span>${c.start_ms ? fmt.format(c.start_ms) : "—"}${days ? ` · ${days} jours` : ""}</span><span>${c.reception_mode === "switched" ? "Mode commuté" : "Mode simultané"} · ${esc(c.sdr)}</span></div>
+        </div>
+        <span class="linkbtn">Voir les résultats</span>
+      </a>`;
+    }).join("");
+  })();
+  </script>
+</body>
+</html>

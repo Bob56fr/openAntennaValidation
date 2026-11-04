@@ -144,6 +144,12 @@ class SpectrumConfig(_Section):
     clip_alert_ratio: float = Field(default=0.001, gt=0.0)
 
 
+class DemoConfig(_Section):
+    """Demonstration campaigns, shown while no real campaign exists (decision D9)."""
+
+    enabled: bool = True
+
+
 class WebConfig(_Section):
     host: str = "0.0.0.0"
     port: int = Field(default=8660, ge=1, le=65535)
@@ -174,6 +180,7 @@ class Config(_Section):
     receiver: ReceiverConfig = Field(default_factory=ReceiverConfig)
     spectrum: SpectrumConfig = Field(default_factory=SpectrumConfig)
     bands: list[Band] = Field(default_factory=_default_bands)
+    demo: DemoConfig = Field(default_factory=DemoConfig)
     web: WebConfig = Field(default_factory=WebConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)

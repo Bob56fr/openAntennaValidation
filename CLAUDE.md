@@ -50,7 +50,7 @@ Pièges Windows : PowerShell 5.1 écrit en UTF-8 avec BOM (`Set-Content`, `Out-F
 | P3 Mode commuté, fréquences imposées | À faire |
 | P4 Bande automatique | À faire |
 | P5 Mode simultané | À faire |
-| P6 Résultats locaux | À faire |
+| P6 Résultats locaux | En partie (D11) : démonstration, liste, page de résultats sur l'API |
 | P7 WordPress | À faire |
 | P8 RTL-SDR V4 et Airspy HF+ | À faire |
 | P9 Installeurs | Linux : première version (`install/linux`) ; Windows : à faire |
