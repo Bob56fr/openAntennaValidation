@@ -1,0 +1,537 @@
+<title>openDualSDR Qualification</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout : rapport lu de haut en bas ; verdict par classe en tête (ce que l'opérateur doit décider),
+   puis les preuves (banc, A/A), le profil retenu et l'acceptation des limites. */
+:root {
+  --bg: #f2f3f0;
+  --surface: #fcfcfb;
+  --surface-2: #f6f7f4;
+  --ink: #121512;
+  --ink-2: #4b514c;
+  --muted: #7d837d;
+  --line: #e1e2dc;
+  --axis: #c3c5bd;
+  --ring: rgba(18, 21, 18, 0.10);
+  --blank: rgba(208, 59, 59, 0.10);
+  --tol: rgba(12, 163, 12, 0.12);
+  --zone: rgba(125, 131, 125, 0.14);
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --good-ink: #006300;
+  --warn-ink: #7a5200;
+  --crit-ink: #a12a2a;
+  --good-bg: rgba(12, 163, 12, 0.07);
+  --warn-bg: rgba(250, 178, 25, 0.12);
+  --crit-bg: rgba(208, 59, 59, 0.08);
+  --s1: #2a78d6; --s2: #eb6834;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-cond: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e100e; --surface: #181a18; --surface-2: #1e211e; --ink: #eef0ec; --ink-2: #c0c4bc;
+    --muted: #8a8e88; --line: #2b2e2b; --axis: #3b3e3a; --ring: rgba(255, 255, 255, 0.10);
+    --blank: rgba(230, 103, 103, 0.14); --tol: rgba(60, 194, 60, 0.14); --zone: rgba(138, 142, 136, 0.16);
+    --good-ink: #3cc23c; --warn-ink: #f3c75a; --crit-ink: #f08a8a;
+    --good-bg: rgba(12, 163, 12, 0.12); --warn-bg: rgba(250, 178, 25, 0.12); --crit-bg: rgba(208, 59, 59, 0.14);
+    --s1: #3987e5; --s2: #d95926;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e100e; --surface: #181a18; --surface-2: #1e211e; --ink: #eef0ec; --ink-2: #c0c4bc;
+  --muted: #8a8e88; --line: #2b2e2b; --axis: #3b3e3a; --ring: rgba(255, 255, 255, 0.10);
+  --blank: rgba(230, 103, 103, 0.14); --tol: rgba(60, 194, 60, 0.14); --zone: rgba(138, 142, 136, 0.16);
+  --good-ink: #3cc23c; --warn-ink: #f3c75a; --crit-ink: #f08a8a;
+  --good-bg: rgba(12, 163, 12, 0.12); --warn-bg: rgba(250, 178, 25, 0.12); --crit-bg: rgba(208, 59, 59, 0.14);
+  --s1: #3987e5; --s2: #d95926;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.eyebrow { font-family: var(--font-cond); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.topbar { border-bottom: 1px solid var(--line); background: var(--surface); }
+.topbar .wrap { display: flex; align-items: center; gap: 16px; padding-block: 10px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-cond); font-weight: 600; font-size: 17px; }
+.tabs { display: flex; gap: 4px; font-size: 14px; flex-wrap: wrap; }
+.tabs span { padding: 4px 10px; border-radius: 4px; color: var(--ink-2); }
+.tabs span[aria-current] { background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.mock-flag { margin-left: auto; font-size: 12px; color: var(--ink-2); border: 1px dashed var(--axis); border-radius: 999px; padding: 2px 10px; }
+
+.head { padding-block: 28px 16px; display: grid; gap: 12px; }
+.head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.head h1 { margin: 0; font-family: var(--font-cond); font-weight: 600; font-size: clamp(26px, 3.4vw, 36px); line-height: 1.12; text-wrap: balance; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 18px; color: var(--ink-2); font-size: 14px; }
+.meta b { color: var(--ink); font-weight: 500; }
+.seg { display: inline-flex; background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--line); padding: 2px; }
+.seg button { font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 0; border-radius: 4px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.seg button:hover { color: var(--ink); background: var(--surface-2); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+:is(button, input, a):focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+/* Étapes */
+.steps { display: flex; flex-wrap: wrap; gap: 6px 0; list-style: none; margin: 0; padding: 0; font-size: 13.5px; }
+.steps li { display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
+.steps li + li::before { content: ""; width: 22px; height: 1px; background: var(--axis); margin: 0 10px; }
+.steps .n { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+main { display: grid; gap: 30px; padding-block: 22px 56px; }
+section { display: grid; gap: 14px; }
+.sec-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.sec-head h2 { margin: 0; font-family: var(--font-cond); font-weight: 600; font-size: 21px; }
+.sec-head p { margin: 0; color: var(--muted); font-size: 13.5px; }
+
+/* Verdicts */
+.verdicts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1000px) { .verdicts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .verdicts { grid-template-columns: minmax(0, 1fr); } }
+.vcard { border-radius: var(--r); padding: 14px 16px; display: grid; gap: 6px; align-content: start; box-shadow: inset 0 0 0 1px var(--ring); background: var(--surface); position: relative; overflow: hidden; min-width: 0; }
+.vcard::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; }
+.vcard.ok::before { background: var(--good); } .vcard.warn::before { background: var(--warning); } .vcard.bad::before { background: var(--critical); }
+.vcard.ok { background: linear-gradient(var(--good-bg), var(--good-bg)), var(--surface); }
+.vcard.warn { background: linear-gradient(var(--warn-bg), var(--warn-bg)), var(--surface); }
+.vcard.bad { background: linear-gradient(var(--crit-bg), var(--crit-bg)), var(--surface); }
+.vtop { display: flex; align-items: center; gap: 8px; }
+.vname { font-weight: 600; font-size: 14.5px; }
+.vstate { font-size: 12.5px; font-weight: 600; }
+.ok .vstate { color: var(--good-ink); } .warn .vstate { color: var(--warn-ink); } .bad .vstate { color: var(--crit-ink); }
+.vmargin { font-size: 26px; font-weight: 600; line-height: 1.15; }
+.vmargin small { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.vdesc { font-size: 13px; color: var(--ink-2); }
+.ico { width: 16px; height: 16px; display: inline-block; vertical-align: -3px; flex: none; }
+
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 16px 16px 10px; display: grid; gap: 6px; min-width: 0; align-content: start; }
+.card h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.card .desc { margin: 0; font-size: 13px; color: var(--muted); max-width: 72ch; }
+.chart { width: 100%; min-width: 0; }
+.h-l { height: 300px; } .h-m { height: 260px; }
+.key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); padding: 2px 2px 4px; }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 10px; border-radius: 2px; box-shadow: inset 0 0 0 1px var(--ring); display: inline-block; }
+.ln { width: 16px; height: 0; border-top: 2px solid; display: inline-block; }
+
+/* Profil */
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+th { font-weight: 500; color: var(--ink-2); font-size: 12px; white-space: nowrap; }
+td.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td .why { display: block; font-size: 12px; color: var(--muted); }
+
+/* Acceptation */
+.accept { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 18px 20px; display: grid; gap: 12px; }
+.accept h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.accept ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px; color: var(--ink-2); max-width: 90ch; }
+.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; cursor: pointer; max-width: 80ch; }
+.check input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--ink); flex: none; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn { font: inherit; font-size: 14px; font-weight: 500; border: 0; border-radius: var(--r); padding: 8px 16px; cursor: pointer; }
+.btn.primary { background: var(--ink); color: var(--surface); }
+.btn.primary:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn.ghost { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px var(--axis); }
+.btn.ghost:hover { background: var(--surface-2); }
+.done { font-size: 14px; color: var(--good-ink); display: inline-flex; align-items: center; gap: 6px; }
+.validity { font-size: 13px; color: var(--muted); }
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+footer .wrap { padding-block: 16px 28px; }
+</style>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M2 15 Q6 4 11 11 T20 7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/><path d="M2 18 Q7 9 11 14 T20 12" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linecap="round"/></svg>openDualSDR</div>
+    <nav class="tabs" aria-label="Station"><span>Tableau de bord</span><span>Campagnes</span><span aria-current="page">Qualification</span><span>Installation</span><span>Réglages</span></nav>
+    <span class="mock-flag">Maquette P0, données simulées</span>
+  </div>
+</header>
+
+<div class="wrap head">
+  <div class="eyebrow" id="eyebrow"></div>
+  <div class="head-row">
+    <h1 id="title"></h1>
+    <div class="seg" id="mode" aria-label="Exemple"><button data-v="commute" aria-pressed="true">Mode commuté</button><button data-v="simul" aria-pressed="false">Mode simultané</button></div>
+  </div>
+  <div class="meta" id="meta"></div>
+  <ol class="steps" id="steps"></ol>
+</div>
+
+<main class="wrap">
+  <section>
+    <div class="sec-head"><h2>Verdict par classe de signal</h2><p>Marge = plus petite différence entre antennes que la méthode peut affirmer, sur des fenêtres de 5 min.</p></div>
+    <div class="verdicts" id="verdicts"></div>
+  </section>
+
+  <section id="sec-bench">
+    <div class="sec-head"><h2 id="bench-title">Banc matériel</h2><p id="bench-sub"></p></div>
+    <div class="grid2">
+      <div class="card">
+        <h3 id="t-step"></h3><p class="desc" id="d-step"></p>
+        <div class="key" id="k-step"></div>
+        <div id="c-step" class="chart h-l" role="img" aria-label="Réponse à une bascule d'antenne"></div>
+      </div>
+      <div class="card">
+        <h3 id="t-hist"></h3><p class="desc" id="d-hist"></p>
+        <div id="c-hist" class="chart h-l" role="img" aria-label="Répartition des latences"></div>
+      </div>
+      <div class="card">
+        <h3 id="t-imb"></h3><p class="desc" id="d-imb"></p>
+        <div class="key" id="k-imb"></div>
+        <div id="c-imb" class="chart h-m" role="img" aria-label="Déséquilibre entre voies selon la fréquence"></div>
+      </div>
+      <div class="card" id="card-frac">
+        <h3>Temps utile selon la cadence de commutation</h3><p class="desc" id="d-frac"></p>
+        <div id="c-frac" class="chart h-m" role="img" aria-label="Fraction de temps utile selon la cadence"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>Campagne A/A en réception réelle</h2><p id="aa-sub"></p></div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Plus petite différence détectable</h3><p class="desc">Selon la durée de la fenêtre de mesure. Plus la fenêtre est longue, plus la méthode distingue de petits écarts.</p>
+        <div class="key" id="k-mdd"></div>
+        <div id="c-mdd" class="chart h-l" role="img" aria-label="Plus petite différence détectable selon la durée de fenêtre"></div>
+      </div>
+      <div class="card">
+        <h3>Écart A − A mesuré pendant 6 h</h3><p class="desc">Une seule antenne sur les deux voies : l'écart vrai est nul. Ce qui reste est l'erreur de la méthode, après correction du biais.</p>
+        <div id="c-aa" class="chart h-l" role="img" aria-label="Écart mesuré entre deux voies recevant la même antenne"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>Profil matériel retenu</h2><p>Enregistré avec l'identité du matériel et réutilisé par les campagnes.</p></div>
+    <div class="card"><div class="tbl-wrap"><table id="profile"></table></div></div>
+  </section>
+
+  <section>
+    <div class="accept" id="accept">
+      <h3>Accepter ces limites et préparer la campagne</h3>
+      <ul id="limits"></ul>
+      <label class="check"><input type="checkbox" id="ack"> J'ai lu ces limites. Elles seront jointes à la campagne et affichées avec ses résultats, localement et sur WordPress.</label>
+      <div class="actions">
+        <button class="btn primary" id="go" disabled>Préparer la campagne avec ces limites</button>
+        <button class="btn ghost" id="edit">Modifier les réglages</button>
+        <span class="done" id="done" hidden></span>
+      </div>
+      <div class="validity" id="validity"></div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap">Maquette de la phase P0 d'openDualSDR. Les mesures de ce rapport sont simulées ; les valeurs réelles du RSP2 Pro seront connues en phase P2.</div></footer>
+
+<script src="vendor/echarts.min.js"></script>
+<script>
+"use strict";
+const NF1 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const NF2 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const f1 = v => NF1.format(v).replace("-", "−");
+const f2 = v => NF2.format(v).replace("-", "−");
+const s2 = v => (v > 0.004 ? "+" : "") + f2(v);
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = mulberry32(42);
+const gauss = () => { let u = 0, v = 0; while (u === 0) u = rnd(); while (v === 0) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+
+const ICON = {
+  ok: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--good)"/><path d="M4.6 8.2l2.2 2.2 4.6-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  warn: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l7 12.5H1z" fill="var(--warning)"/><path d="M8 6v4" stroke="#0b0b0b" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="12" r="1" fill="#0b0b0b"/></svg>`,
+  bad: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--critical)"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+};
+const STATE_WORD = { ok: "Exploitable", warn: "Dégradé", bad: "Inexploitable" };
+
+/* ---------- Deux exemples ---------- */
+const EX = {
+  commute: {
+    eyebrow: "Rapport de qualification · mode commuté",
+    title: "SDRplay RSP2 Pro, entrées A et B, bande 40 m",
+    meta: `<span>N° de série <b>1803xxxx</b></span><span>LNA 3 · GR 40 dB · 250 kHz utiles</span><span>Commutation rapide à <b>25 Hz</b> (20 ms par antenne)</span><span>1er nov. 2026</span>`,
+    steps: [["Splitter symétrique", "ok"], ["Atténuateur 10 dB", "ok"], ["Isolation", "ok"], ["Plancher propre", "ok"], ["Décodeur FT8", "bad"], ["Campagne A/A, 6 h", "ok"]],
+    verdicts: [
+      { name: "Porteuses et CW", s: "ok", m: 0.3, d: "Temps utile 79 %. Adapté aux mesures rapides." },
+      { name: "Signaux numériques", s: "ok", m: 0.4, d: "Mesure spectrale pendant la transmission, enveloppe constante." },
+      { name: "SSB", s: "warn", m: 1.8, d: "La voix varie plus vite que la commutation : écarts de moins de 1,8 dB non affirmés sur 5 min." },
+      { name: "Décodage FT8 pendant la commutation", s: "bad", m: null, d: "41 % de décodages perdus. Commutation par créneau de 30 s proposée pour les mesures guidées.", stat: "−41 %" },
+    ],
+    bench: true,
+    benchSub: "Une antenne sur les deux entrées par un splitter, puis un atténuateur de 10 dB sur la branche B.",
+    latency: { p50: 1.4, p99: 2.6, settle: 1.6, blank: 4.2, n: 2000 },
+    imbTitle: "Déséquilibre des entrées A − B", imbDesc: "Mesuré câbles normaux puis inversés : la moyenne retire le déséquilibre du splitter (0,08 dB).",
+    imb: f => 0.35 + 0.35 * (f - 7.0) + 0.03 * Math.sin(f * 90),
+    aaSub: "Campagne du 1er nov. 2026, 18 h → 0 h, sur 40 m, avec la même antenne et les réglages de la future campagne.",
+    mdd: { cw: [0.67, 0.12], num: [0.9, 0.15], ssb: [4.0, 0.45] },
+    profile: [
+      ["Latence commande → effet", "p50 1,4 ms · p99 2,6 ms", "Mesurée sur 2 000 bascules, marche de 10 dB détectée dans le flux"],
+      ["Temps d'établissement", "1,6 ms", "Retour à ±0,2 dB du niveau final"],
+      ["Neutralisation après bascule", "4,2 ms", "p99 de la latence + établissement"],
+      ["Isolation entre entrées", "48 dB", "Suffisant tant que les antennes diffèrent de moins de 25 dB"],
+      ["Plancher propre du SDR", "−131 dBFS (100 Hz)", "Bruit d'antenne 11 dB au-dessus : bruit extérieur dominant"],
+      ["Table de correction A − B", "+0,35 à +0,42 dB", "Appliquée au calcul, la mesure brute reste inchangée"],
+      ["Biais résiduel après correction", "+0,04 dB", "Campagne A/A"],
+      ["Perte d'échantillons", "0 sur 6 h", "Compteur de l'API"],
+    ],
+    limits: [
+      "Écarts affirmés seulement au-delà de ±0,3 dB (porteuses, CW), ±0,4 dB (numériques), ±1,8 dB (SSB), sur 5 min.",
+      "Décodage FT8/WSPR : commutation par créneau de 30 s au lieu de la commutation rapide.",
+      "Profil valable pour ce RSP2 Pro, la bande 40 m, LNA 3 / GR 40 et 25 Hz.",
+    ],
+  },
+  simul: {
+    eyebrow: "Rapport de qualification · mode simultané",
+    title: "2 × SDRplay RSP2 Pro, bande 40 m",
+    meta: `<span>N° de série <b>1803xxxx</b> (voie 1) et <b>1804xxxx</b> (voie 2)</span><span>LNA 3 · GR 40 dB · 250 kHz utiles</span><span>Splitter Wilkinson 2 voies</span><span>1er nov. 2026</span>`,
+    steps: [["Splitter symétrique", "ok"], ["Alignement temporel", "warn"], ["Plancher propre", "ok"], ["Décodeur FT8", "ok"], ["Campagne A/A, 6 h", "ok"]],
+    verdicts: [
+      { name: "Porteuses et CW", s: "ok", m: 0.2, d: "Mesure simultanée : le fading s'annule dans l'écart." },
+      { name: "Signaux numériques", s: "ok", m: 0.3, d: "Mesures guidées par le décodage possibles sur les deux voies." },
+      { name: "SSB", s: "warn", m: 0.9, d: "Désalignement de 1,8 ms entre voies (p99 2,9 ms) : marge élargie." },
+      { name: "Décodage FT8", s: "ok", m: null, d: "Flux continus sur chaque voie : décodage complet.", stat: "100 %" },
+    ],
+    bench: true,
+    benchSub: "Une antenne sur les deux SDR par un splitter. Pas de commutation : on mesure l'alignement des flux et l'écart entre SDR.",
+    align: { p50: 1.8, p99: 2.9, n: 1440 },
+    imbTitle: "Écart voie 2 − voie 1 (étalonnage)", imbDesc: "Différence de gain entre les deux SDR selon la fréquence, mesurée câbles normaux puis inversés.",
+    imb: f => 1.2 - 0.6 * (f - 7.0) + 0.05 * Math.sin(f * 60),
+    aaSub: "Campagne du 1er nov. 2026, 18 h → 0 h, sur 40 m, avec la même antenne sur les deux SDR.",
+    mdd: { cw: [0.45, 0.1], num: [0.67, 0.12], ssb: [2.0, 0.3] },
+    profile: [
+      ["Alignement temporel des flux", "p50 1,8 ms · p99 2,9 ms", "Estimé par corrélation des enveloppes, toutes les minutes"],
+      ["Tolérance d'alignement (SSB)", "5 ms", "Au-delà, mesures SSB codées DÉSALIGNÉE"],
+      ["Plancher propre (voie 1 / voie 2)", "−131 / −130 dBFS (100 Hz)", "Bruit d'antenne 11 dB au-dessus : bruit extérieur dominant"],
+      ["Table d'étalonnage voie 2 − voie 1", "+1,08 à +1,21 dB", "Appliquée au calcul, la mesure brute reste inchangée"],
+      ["Dérive sur 6 h", "0,06 dB", "Suivi de l'écart A/A heure par heure"],
+      ["Biais résiduel après correction", "+0,02 dB", "Campagne A/A"],
+      ["Perte d'échantillons", "0 sur 6 h", "Compteurs de l'API, deux processus"],
+    ],
+    limits: [
+      "Écarts affirmés seulement au-delà de ±0,2 dB (porteuses, CW), ±0,3 dB (numériques), ±0,9 dB (SSB), sur 5 min.",
+      "Mesures SSB exclues quand l'alignement dépasse 5 ms.",
+      "Profil valable pour ces deux RSP2 Pro, la bande 40 m et LNA 3 / GR 40.",
+    ],
+  },
+};
+let mode = "commute";
+
+/* ---------- Graphiques ---------- */
+const charts = {};
+const chart = id => charts[id] || (charts[id] = echarts.init($(id)));
+const T = () => ({ ink: css("--ink"), ink2: css("--ink-2"), muted: css("--muted"), line: css("--line"), axis: css("--axis"), surface: css("--surface"),
+  blank: css("--blank"), tol: css("--tol"), zone: css("--zone"), s1: css("--s1"), s2: css("--s2"), good: css("--good"), warning: css("--warning"), critical: css("--critical") });
+function base(t) {
+  return {
+    animation: false,
+    textStyle: { fontFamily: css("--font-body"), color: t.ink2, fontSize: 12 },
+    grid: { left: 52, right: 18, top: 18, bottom: 40 },
+    tooltip: { backgroundColor: t.surface, borderColor: t.line, borderWidth: 1, padding: [8, 10], textStyle: { color: t.ink, fontSize: 12.5 }, extraCssText: "box-shadow:0 4px 16px rgba(0,0,0,.12);border-radius:6px;" },
+  };
+}
+const ax = t => ({ axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { color: t.muted, fontSize: 11.5 }, splitLine: { lineStyle: { color: t.line } }, nameTextStyle: { color: t.muted, fontSize: 11.5 } });
+
+// Réponse à une bascule : enveloppe p5–p95 sur 2 000 bascules et trace médiane.
+const STEP = (() => {
+  const L = EX.commute.latency, out = [];
+  for (let x = -6; x <= 14; x += 0.1) {
+    const t = x - L.p50;
+    let v;
+    if (t < 0) v = -60;
+    else v = -70 + 4.5 * Math.exp(-t / 0.45) * Math.cos(t * 5.5) + (t < 0.15 ? 10 * (1 - t / 0.15) : 0);
+    const spread = (x > 0.8 && x < 3.2) ? 4.5 : 0.25;
+    out.push([+x.toFixed(2), v, v - spread * 0.6, v + spread * 0.6]);
+  }
+  return out;
+})();
+function renderStep(t) {
+  const L = EX.commute.latency, o = base(t);
+  o.xAxis = { type: "value", min: -6, max: 14, interval: 2, name: "temps depuis la commande (ms)", nameLocation: "middle", nameGap: 26, ...ax(t), splitLine: { show: false } };
+  o.yAxis = { type: "value", min: -75, max: -55, interval: 5, ...ax(t), axisLabel: { color: t.muted, formatter: v => `${f1(v).replace(",0", "")} dBFS` } }; o.grid = { left: 70, right: 18, top: 18, bottom: 40 };
+  o.tooltip = { ...o.tooltip, trigger: "axis", formatter: ps => { const p = ps.find(q => q.seriesName === "Médiane"); if (!p) return ""; return `<b>${f1(p.value[0])} ms</b><br>médiane ${f1(p.value[1])} dBFS<br><span style="color:${t.muted}">p5–p95 ${f1(p.value[2])} à ${f1(p.value[3])}</span>`; } };
+  o.series = [
+    { type: "line", data: [], silent: true, markArea: { silent: true, data: [
+      [{ xAxis: 0, itemStyle: { color: t.blank } }, { xAxis: L.blank }],
+      [{ yAxis: -70.2, itemStyle: { color: t.tol } }, { yAxis: -69.8 }],
+    ] } },
+    { type: "custom", silent: true, data: [[0, -60]], encode: { x: 0, y: 1 }, renderItem: (p, api) => {
+      const pts = STEP.map(d => api.coord([d[0], d[3]])).concat(STEP.slice().reverse().map(d => api.coord([d[0], d[2]])));
+      return { type: "polygon", shape: { points: pts }, style: { fill: css("--zone") } }; } },
+    { type: "line", name: "Médiane", data: STEP, symbol: "none", lineStyle: { width: 2, color: t.ink }, encode: { x: 0, y: 1 },
+      markLine: { silent: true, symbol: "none", data: [
+        { xAxis: 0, lineStyle: { color: t.ink2, type: "dashed" }, label: { formatter: "commande", color: t.ink2, position: "insideEndTop", fontSize: 11 } },
+        { xAxis: L.p50, lineStyle: { color: t.ink2, type: "solid" }, label: { formatter: "effet (p50)", color: t.ink2, position: "insideEndBottom", fontSize: 11 } },
+        { xAxis: L.blank, lineStyle: { color: t.critical, type: "solid" }, label: { formatter: `fin de neutralisation, ${f1(L.blank)} ms`, color: t.ink2, position: "insideStartTop", fontSize: 11 } },
+      ] } },
+  ];
+  chart("c-step").setOption(o, true);
+  $("k-step").innerHTML = `<span><i class="ln" style="border-color:${t.ink}"></i>Médiane</span><span><i class="sw" style="background:${t.zone}"></i>p5–p95 sur ${EX.commute.latency.n} bascules</span><span><i class="sw" style="background:${t.blank}"></i>Neutralisée</span><span><i class="sw" style="background:${t.tol}"></i>±0,2 dB du niveau final</span>`;
+}
+
+function hist(p50, p99, n, seed) {
+  const r = mulberry32(seed), out = {};
+  const sd = (p99 - p50) / 2.33;
+  for (let i = 0; i < n; i++) {
+    let u = 0, v = 0; while (u === 0) u = r(); while (v === 0) v = r();
+    const g = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    const x = Math.max(0.3, p50 + sd * (g > 0 ? g * 1.15 : g * 0.8));
+    const b = Math.round(x * 10) / 10; out[b] = (out[b] || 0) + 1;
+  }
+  return Object.entries(out).map(([k, v]) => [+k, v]).sort((a, b) => a[0] - b[0]);
+}
+function renderHist(t) {
+  const E = EX[mode], o = base(t);
+  const sim = mode === "simul";
+  const d = sim ? hist(E.align.p50, E.align.p99, E.align.n, 7) : hist(E.latency.p50, E.latency.p99, E.latency.n, 3);
+  const p50 = sim ? E.align.p50 : E.latency.p50, p99 = sim ? E.align.p99 : E.latency.p99;
+  const cats = []; for (let x = 0.3; x <= (sim ? 6 : 4) + 1e-9; x += 0.1) cats.push(+x.toFixed(1));
+  const map = Object.fromEntries(d);
+  o.xAxis = { type: "category", data: cats, ...ax(t), axisLabel: { color: t.muted, interval: 4, formatter: v => f1(+v) }, name: sim ? "décalage entre voies (ms)" : "latence (ms)", nameLocation: "middle", nameGap: 26, splitLine: { show: false } };
+  o.yAxis = { type: "value", ...ax(t), name: sim ? "minutes" : "bascules", nameGap: 10 };
+  o.tooltip = { ...o.tooltip, trigger: "item", formatter: p => `<b>${f1(+p.name)} ms</b><br>${p.value} ${sim ? "minutes" : "bascules"}` };
+  o.series = [{ type: "bar", data: cats.map(c => map[c] || 0), barCategoryGap: "12%", itemStyle: { color: css("--muted"), borderRadius: [3, 3, 0, 0] },
+    markLine: { silent: true, symbol: "none", data: [
+      { xAxis: cats.indexOf(p50), lineStyle: { color: t.ink, type: "solid" }, label: { formatter: `p50 ${f1(p50)} ms`, color: t.ink2, fontSize: 11 } },
+      { xAxis: cats.indexOf(p99), lineStyle: { color: t.critical, type: "solid" }, label: { formatter: `p99 ${f1(p99)} ms`, color: t.ink2, fontSize: 11 } },
+      ...(sim ? [{ xAxis: cats.indexOf(5), lineStyle: { color: t.ink2, type: "dashed" }, label: { formatter: "tolérance SSB 5 ms", color: t.ink2, fontSize: 11 } }] : []),
+    ] } }];
+  chart("c-hist").setOption(o, true);
+  $("t-hist").textContent = sim ? "Alignement temporel des deux flux" : "Latence entre la commande et l'effet";
+  $("d-hist").textContent = sim
+    ? "Décalage estimé chaque minute par corrélation des enveloppes de puissance d'un signal commun."
+    : "L'API applique la bascule de façon asynchrone ; l'instant réel est repéré dans le flux grâce à la marche de 10 dB.";
+}
+
+function renderImb(t) {
+  const E = EX[mode], o = base(t);
+  const fs = []; for (let f = 7.0; f <= 7.2 + 1e-9; f += 0.005) fs.push(+f.toFixed(3));
+  const split = 0.08;
+  const r = mulberry32(mode === "simul" ? 11 : 5), g = () => (r() + r() + r() - 1.5) * 0.03;
+  const normal = fs.map(f => [f, E.imb(f) + split + g()]);
+  const swapped = fs.map(f => [f, E.imb(f) - split + g()]);
+  const kept = fs.map(f => [f, E.imb(f)]);
+  o.grid = { left: 52, right: 18, top: 14, bottom: 40 };
+  o.xAxis = { type: "value", min: 7.0, max: 7.2, interval: 0.05, ...ax(t), axisLabel: { color: t.muted, formatter: v => NF2.format(v) }, name: "MHz", nameLocation: "middle", nameGap: 26, splitLine: { show: false } };
+  o.yAxis = { type: "value", scale: true, ...ax(t), axisLabel: { color: t.muted, formatter: v => s2(v) }, name: "dB", nameGap: 10 };
+  o.tooltip = { ...o.tooltip, trigger: "axis", formatter: ps => `<b>${NF2.format(ps[0].value[0])} MHz</b><br>` + ps.map(p => `${p.seriesName} : ${s2(p.value[1])} dB`).join("<br>") };
+  o.series = [
+    { type: "line", name: "Câbles normaux", data: normal, symbol: "none", lineStyle: { width: 1.5, color: t.muted } },
+    { type: "line", name: "Câbles inversés", data: swapped, symbol: "none", lineStyle: { width: 1.5, color: t.muted, type: "dashed" } },
+    { type: "line", name: "Correction retenue", data: kept, symbol: "none", lineStyle: { width: 2.2, color: t.s1 } },
+  ];
+  chart("c-imb").setOption(o, true);
+  $("t-imb").textContent = E.imbTitle; $("d-imb").textContent = E.imbDesc;
+  $("k-imb").innerHTML = `<span><i class="ln" style="border-color:${t.muted}"></i>Câbles normaux</span><span><i class="ln" style="border-color:${t.muted};border-top-style:dashed"></i>Câbles inversés</span><span><i class="ln" style="border-color:${t.s1}"></i>Correction retenue (moyenne)</span>`;
+}
+
+function renderFrac(t) {
+  const card = $("card-frac"); card.hidden = mode !== "commute";
+  if (mode !== "commute") return;
+  const L = EX.commute.latency, o = base(t);
+  const data = []; for (let r = 1; r <= 100; r *= 1.06) { const dwell = 1000 / (2 * r); data.push([+r.toFixed(2), Math.max(0, 100 * (1 - L.blank / dwell))]); }
+  o.grid = { left: 52, right: 18, top: 24, bottom: 40 };
+  o.xAxis = { type: "log", min: 1, max: 100, logBase: 10, ...ax(t), axisLabel: { color: t.muted, formatter: v => `${v} Hz` }, name: "cadence de commutation", nameLocation: "middle", nameGap: 26, splitLine: { show: false } };
+  o.yAxis = { type: "value", min: 0, max: 100, ...ax(t), axisLabel: { color: t.muted, formatter: v => `${v} %` } };
+  o.tooltip = { ...o.tooltip, trigger: "axis", formatter: ps => `<b>${f1(ps[0].value[0])} Hz</b> (${f1(1000 / (2 * ps[0].value[0]))} ms par antenne)<br>temps utile ${Math.round(ps[0].value[1])} %` };
+  o.series = [{ type: "line", data, symbol: "none", lineStyle: { width: 2, color: t.ink },
+    markArea: { silent: true, data: [[{ xAxis: 20, itemStyle: { color: t.zone }, label: { show: true, formatter: "cadence utile pour la SSB", color: t.ink2, fontSize: 11, position: "insideTop" } }, { xAxis: 100 }]] },
+    markPoint: { symbol: "circle", symbolSize: 10, itemStyle: { color: t.ink, borderColor: t.surface, borderWidth: 2 }, label: { show: true, position: "left", formatter: "réglage : 25 Hz, 79 %", color: t.ink, fontSize: 11.5, distance: 8 },
+      data: [{ coord: [25, 100 * (1 - L.blank / 20)] }] } }];
+  chart("c-frac").setOption(o, true);
+  $("d-frac").textContent = `Chaque bascule neutralise ${f1(L.blank)} ms. À 25 Hz, chaque antenne est écoutée 20 ms, dont 15,8 ms utiles. Plus on commute vite pour suivre la voix, plus on perd de temps.`;
+}
+
+function renderMDD(t) {
+  const E = EX[mode], o = base(t);
+  const cls = [["cw", "Porteuses et CW", t.ink, "solid", "circle"], ["num", "Numériques", t.ink2, "dashed", "rect"], ["ssb", "SSB", t.muted, "dotted", "triangle"]];
+  const Ts = [1, 2, 5, 10, 15, 30, 60];
+  o.grid = { left: 52, right: 18, top: 18, bottom: 40 };
+  o.xAxis = { type: "log", min: 1, max: 60, logBase: 10, ...ax(t), axisLabel: { color: t.muted, formatter: v => `${v} min` }, name: "durée de la fenêtre", nameLocation: "middle", nameGap: 26, splitLine: { show: false } };
+  o.yAxis = { type: "value", min: 0, ...ax(t), axisLabel: { color: t.muted, formatter: v => `±${f1(v)}` }, name: "dB", nameGap: 10 };
+  o.tooltip = { ...o.tooltip, trigger: "axis", formatter: ps => `<b>Fenêtre de ${ps[0].value[0]} min</b><br>` + ps.map(p => `${p.seriesName} : ±${f2(p.value[1])} dB`).join("<br>") };
+  o.series = cls.map(([k, name, col, type, sym]) => ({ type: "line", name, symbol: sym, symbolSize: 7, data: Ts.map(T0 => [T0, Math.max(E.mdd[k][1], E.mdd[k][0] / Math.sqrt(T0))]),
+    lineStyle: { width: 2, color: col, type }, itemStyle: { color: col, borderColor: t.surface, borderWidth: 1.5 },
+  }));
+
+  o.series[0].markLine = { silent: true, symbol: "none", data: [{ xAxis: 5, lineStyle: { color: t.axis, type: "solid" }, label: { formatter: "fenêtre retenue : 5 min", color: t.ink2, fontSize: 11, position: "insideEndTop" } }] };
+  chart("c-mdd").setOption(o, true);
+  $("k-mdd").innerHTML = cls.map(([, name, col, type]) => `<span><i class="ln" style="border-color:${col};border-top-style:${type}"></i>${name}</span>`).join("");
+}
+
+const AA = (() => {
+  const out = [];
+  for (let i = 0; i < 72; i++) { const ts = Date.UTC(2026, 10, 1, 17, 0) + i * 5 * 60e3; out.push([ts, 0.04 + gauss() * 0.12, 0.02 + gauss() * 0.15, 0.05 + gauss() * 0.6]); }
+  return out;
+})();
+const fmtT = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" });
+function renderAA(t) {
+  const E = EX[mode], o = base(t), k = mode === "simul" ? 0.6 : 1;
+  const m = E.verdicts[0].m;
+  o.grid = { left: 56, right: 18, top: 34, bottom: 34 };
+  o.legend = { top: 0, left: 0, textStyle: { color: t.ink2, fontSize: 12 }, itemWidth: 16, itemHeight: 4, data: ["Porteuses et CW", "SSB"] };
+  o.xAxis = { type: "time", ...ax(t), splitLine: { show: false }, axisLabel: { color: t.muted, formatter: v => fmtT.format(v) } };
+  o.yAxis = { type: "value", min: -2, max: 2, interval: 1, ...ax(t), axisLabel: { color: t.muted, formatter: v => `${v > 0 ? "+" : ""}${f1(v).replace(",0", "")} dB` } };
+  o.tooltip = { ...o.tooltip, trigger: "axis", formatter: ps => `<b>${fmtT.format(ps[0].value[0])}</b> (fenêtre de 5 min)<br>` + ps.map(p => `${p.seriesName} : ${s2(p.value[1])} dB`).join("<br>") };
+  o.series = [
+    { type: "line", name: "SSB", data: AA.map(d => [d[0], d[3] * k]), symbol: "none", lineStyle: { width: 1.5, color: t.muted, type: "dotted" }, itemStyle: { color: t.muted } },
+    { type: "line", name: "Porteuses et CW", data: AA.map(d => [d[0], d[1] * k]), symbol: "none", lineStyle: { width: 2, color: t.ink }, itemStyle: { color: t.ink },
+      markArea: { silent: true, itemStyle: { color: t.tol }, data: [[{ yAxis: -m }, { yAxis: m }]] },
+      markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: t.axis, type: "solid" }, data: [{ yAxis: 0 }] } },
+  ];
+  chart("c-aa").setOption(o, true);
+}
+
+/* ---------- Blocs ---------- */
+function renderBlocks() {
+  const E = EX[mode];
+  $("eyebrow").textContent = E.eyebrow; $("title").textContent = E.title; $("meta").innerHTML = E.meta;
+  $("steps").innerHTML = E.steps.map(([n, s], i) => `<li><span class="n">${i + 1}</span>${ICON[s]}${n}</li>`).join("");
+  $("verdicts").innerHTML = E.verdicts.map(v => `<article class="vcard ${v.s}">
+      <div class="vtop">${ICON[v.s]}<span class="vstate">${STATE_WORD[v.s]}</span></div>
+      <div class="vname">${v.name}</div>
+      <div class="vmargin mono">${v.m != null ? `±${f1(v.m)} <small>dB</small>` : `${v.stat} <small>décodages</small>`}</div>
+      <div class="vdesc">${v.d}</div></article>`).join("");
+  $("bench-title").textContent = mode === "commute" ? "Banc matériel : la commutation" : "Banc matériel : les deux SDR";
+  $("bench-sub").textContent = E.benchSub;
+  $("t-step").textContent = "Réponse à une bascule A → B";
+  $("d-step").textContent = "Avec 10 dB d'atténuation sur B, la bascule devient une marche visible. On y lit la latence, le parasite et le temps de retour au niveau final.";
+  document.querySelector("#c-step").closest(".card").hidden = mode !== "commute";
+  $("aa-sub").textContent = E.aaSub;
+  $("profile").innerHTML = `<thead><tr><th>Paramètre</th><th>Valeur</th><th>Origine</th></tr></thead><tbody>${E.profile.map(r => `<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td style="color:var(--ink-2)">${r[2]}</td></tr>`).join("")}</tbody>`;
+  $("limits").innerHTML = E.limits.map(l => `<li>${l}</li>`).join("");
+  $("validity").textContent = "Valable jusqu'au 1er mai 2027, ou jusqu'au prochain changement de matériel, de bande, de gain ou de cadence. La station proposera alors une nouvelle qualification.";
+  $("ack").checked = false; $("go").disabled = true; $("done").hidden = true;
+  document.querySelectorAll("#mode button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === mode)));
+}
+
+function renderAll() {
+  const t = T();
+  renderBlocks();
+  if (mode === "commute") renderStep(t);
+  renderHist(t); renderImb(t); renderFrac(t); renderMDD(t); renderAA(t);
+  Object.values(charts).forEach(c => c.resize());
+}
+
+$("mode").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; mode = b.dataset.v; renderAll(); });
+$("ack").addEventListener("change", e => { $("go").disabled = !e.target.checked; });
+$("go").addEventListener("click", () => { const d = $("done"); d.hidden = false; d.style.color = ""; d.innerHTML = `${ICON.ok} Limites acceptées le 4 nov. 2026. L'assistant de campagne s'ouvre avec ce profil.`; });
+$("edit").addEventListener("click", () => { const d = $("done"); d.hidden = false; d.textContent = "Ouvre les réglages (gain, cadence, bande). Une nouvelle qualification sera proposée."; d.style.color = "var(--ink-2)"; });
+const ro = new ResizeObserver(() => Object.values(charts).forEach(c => c.resize()));
+document.querySelectorAll(".chart").forEach(el => ro.observe(el));
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+new MutationObserver(renderAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+renderAll();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(renderAll);
+</script>
