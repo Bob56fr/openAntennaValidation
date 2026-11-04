@@ -2,6 +2,8 @@
 
 Compare la réception de deux à dix antennes HF en mesurant, sur les mêmes signaux et au même moment, le niveau reçu (RSSI), le plancher de bruit et le rapport signal sur bruit (SNR). Les campagnes durent de 1 minute à 1 mois ; les résultats sont consultables sur la page locale de la station et, si l'opérateur le souhaite, publiés sur un site WordPress commun à plusieurs opérateurs.
 
+**Présentation du projet** (méthode, état d'avancement, participation) : [docs/presentation.md](docs/presentation.md).
+
 - Cahier des charges : [docs/cahier-des-charges.md](docs/cahier-des-charges.md)
 - Décisions et écarts : [docs/decisions.md](docs/decisions.md)
 - Maquettes de l'interface : [design/](design/)
