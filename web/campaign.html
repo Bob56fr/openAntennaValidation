@@ -121,10 +121,27 @@
       <div class="card"><div><h3>Qualification A/A</h3><p class="desc" id="d-qual"></p></div>
         <ul class="verd-list" id="qual-list"></ul></div>
     </section>
+
+    <section id="sec-data">
+      <div class="sec-head"><h2>Qualité des données</h2><p id="data-sub">Mesures mises à l'écart, par antenne et par motif.</p></div>
+      <div class="card">
+        <div class="tbl-wrap"><table id="quality-table"></table></div>
+        <p class="desc" id="quality-note"></p>
+        <div id="interruptions"></div>
+      </div>
+      <div class="card" id="export-card">
+        <div class="card-head">
+          <div><h3>Exporter</h3><p class="desc">Fichiers CSV en UTF-8. Les mesures brutes ne sont jamais corrigées : la correction du profil de qualification est dans sa propre colonne.</p></div>
+          <div class="ctl"><label class="eyebrow" for="csv-dialect">Format</label><select id="csv-dialect"><option value="fr">Tableur français (; et virgule)</option><option value="std">Standard (, et point)</option></select></div>
+        </div>
+        <div class="row-links" id="export-links"></div>
+      </div>
+    </section>
   </main>
 
   <footer><div class="wrap">openAntennaValidation, logiciel libre (GPLv3).</div></footer>
   <script src="/static/vendor/echarts.min.js"></script>
+  <script src="/static/stats.js"></script>
   <script src="/static/results.js"></script>
 </body>
 </html>

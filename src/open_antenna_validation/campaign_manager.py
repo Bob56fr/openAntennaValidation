@@ -388,22 +388,30 @@ def load_running(db: Database) -> Running | None:
 
 
 def _set_corrections(run: Running) -> None:
-    params, signals = run.params, run.signals
+    run.corrections.update(corrections_for(run.params, run.signals, run.n_ch, run.simultaneous))
+
+
+def corrections_for(params: dict[str, Any], signals: list[Any], n_ch: int,
+                    simultaneous: bool) -> dict[int, list[float]]:
+    """Correction (dB) added to each channel's raw level, per signal, from the profile."""
+    out: dict[int, list[float]] = {}
     corr = params.get("correction") or {}
     if corr.get("channels_db"):
         # Simultaneous mode: gain of each SDR against the reference, versus frequency.
         for s in signals:
-            run.corrections[int(s["id"])] = [
+            out[int(s["id"])] = [
                 _interp(corr["freqs_hz"], corr["channels_db"][k], s["freq_hz"])
-                if k < len(corr["channels_db"]) else 0.0 for k in range(run.n_ch)]
-        return
-    if run.simultaneous:
-        return  # not calibrated yet: no correction (the switched bench does not apply)
+                if k < len(corr["channels_db"]) else 0.0 for k in range(n_ch)]
+        return out
+    if simultaneous:
+        return out  # not calibrated yet: no correction (the switched bench does not apply)
+    inputs = params.get("inputs") or []
     for s in signals:
         port = _interp(corr.get("freqs_hz", []), corr.get("port_db", []), s["freq_hz"])
         # port = A - B on the same signal: B reads low by port, A is the scale of reference.
-        run.corrections[int(s["id"])] = [0.0 if params["inputs"][k] == "A" else port
-                                         for k in range(run.n_ch)]
+        out[int(s["id"])] = [0.0 if k < len(inputs) and inputs[k] == "A" else port
+                             for k in range(n_ch)]
+    return out
 
 
 def period_s(run: Running, cfg: Config) -> float:

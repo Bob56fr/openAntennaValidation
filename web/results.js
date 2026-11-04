@@ -17,14 +17,16 @@ const hm = (h) => { h = ((h % 24) + 24) % 24; const H = Math.floor(h); const M =
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 function quantile(sorted, p) { if (!sorted.length) return null; const i = (sorted.length - 1) * p; const lo = Math.floor(i), hi = Math.ceil(i); return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo); }
+// Description d'une série (médiane, quantiles), sans intervalle de confiance.
 function stats(arr) {
   const a = arr.filter((v) => v != null && !Number.isNaN(v)).sort((x, y) => x - y);
   if (!a.length) return null;
-  const mean = a.reduce((s, v) => s + v, 0) / a.length;
-  const sd = Math.sqrt(a.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(1, a.length - 1));
-  // Intervalle de confiance : taille effective réduite (mesures corrélées), comme un bootstrap par blocs.
-  const ci = 1.96 * sd / Math.sqrt(Math.max(1, a.length / 8));
-  return { n: a.length, med: quantile(a, 0.5), p05: quantile(a, 0.05), p10: quantile(a, 0.1), q1: quantile(a, 0.25), q3: quantile(a, 0.75), p90: quantile(a, 0.9), p95: quantile(a, 0.95), ci };
+  return { n: a.length, med: quantile(a, 0.5), p05: quantile(a, 0.05), p10: quantile(a, 0.1), q1: quantile(a, 0.25), q3: quantile(a, 0.75), p90: quantile(a, 0.9), p95: quantile(a, 0.95) };
+}
+// Écart à juger : la série doit rester dans l'ordre du temps (bootstrap par blocs, stats.js).
+function test(series) {
+  const d = stats(series);
+  return d ? { ...d, ...OAVStats.bootstrap(series) } : null;
 }
 function hexA(hex, alpha) {
   const h = hex.replace("#", ""); const n = parseInt(h.length === 3 ? h.split("").map((x) => x + x).join("") : h, 16);
@@ -203,7 +205,7 @@ function profile(a, b) {
 }
 function byClass(a, b, metric = state.metric) {
   const out = {};
-  for (const c of ["jour", "crep", "nuit"]) out[c] = stats(WINS.map((W, i) => (W.cls === c ? delta(a, b, i, metric) : null)));
+  for (const c of ["jour", "crep", "nuit"]) out[c] = test(WINS.map((W, i) => (W.cls === c ? delta(a, b, i, metric) : null)));
   return out;
 }
 function crossings(prof) {
@@ -225,13 +227,15 @@ const ICON = {
 function phrase(cmpA, refA, s, m, metric = state.metric) {
   const cmp = `${cmpA.short} (${cmpA.id})`, ref = `${refA.short} (${refA.id})`;
   if (!s) return "pas de mesure";
-  if (Math.abs(s.med) <= Math.max(m, s.ci)) return `pas d'écart significatif entre ${cmp} et ${ref} (${s1(s.med)} dB, ${marginText()})`;
+  if (!significant(s, m)) return `pas d'écart significatif entre ${cmp} et ${ref} (${s1(s.med)} dB, ${marginText()})`;
   const abs = f1(Math.abs(s.med));
   if (metric === "rssi") return `${cmp} reçoit ${abs} dB de ${s.med > 0 ? "plus" : "moins"} que ${ref}`;
   if (metric === "snr") return `${cmp} a un SNR ${s.med > 0 ? "meilleur" : "moins bon"} de ${abs} dB que ${ref}`;
   return `${cmp} capte ${abs} dB de bruit en ${s.med > 0 ? "plus" : "moins"} que ${ref}`;
 }
-const significant = (s, m) => s && Math.abs(s.med) > Math.max(m, s.ci);
+// Un écart n'est affirmé que s'il dépasse la marge de qualification et que l'intervalle de
+// confiance à 95 % exclut zéro (section 9 du cahier des charges).
+const significant = (s, m) => !!s && Math.abs(s.med) > m && (s.lo > 0 || s.hi < 0);
 function renderSummary() {
   const ref = ANTS[state.ref], cmp = ANTS[state.cmp], m = margin();
   const bc = byClass(cmp, ref), prof = profile(cmp, ref);
@@ -388,13 +392,16 @@ function renderPairs(t) {
   const data = [], raw = [];
   ANTS.forEach((r, y) => ANTS.forEach((c, x) => {
     if (x === y) { data.push({ value: [x, y, "-"], itemStyle: { color: t.line } }); return; }
-    raw.push({ x, y, s: stats(WINS.map((W, i) => (W.cls === period ? delta(r, c, i) : null))) });
+    raw.push({ x, y, s: test(WINS.map((W, i) => (W.cls === period ? delta(r, c, i) : null))) });
   }));
-  raw.sort((p, q) => Math.abs(q.s.med) / q.s.ci - Math.abs(p.s.med) / p.s.ci);
-  raw.forEach((p, rank) => {
-    const holm = Math.sqrt(1 + Math.log(npairs - Math.floor(rank / 2)));
-    const sig = Math.abs(p.s.med) > Math.max(m, p.s.ci * holm);
-    data.push({ value: [p.x, p.y, +p.s.med.toFixed(2)], sig, itemStyle: sig ? undefined : { color: t.divMid }, label: { color: t.ink } });
+  // Correction de Holm sur les paires (chacune une fois), puis la marge de qualification.
+  const once = raw.filter((p) => p.x < p.y && p.s);
+  const rejected = OAVStats.holm(once.map((p) => p.s.p));
+  const sigOf = new Map(once.map((p, k) => [`${p.x}|${p.y}`, rejected[k] && Math.abs(p.s.med) > m]));
+  raw.forEach((p) => {
+    if (!p.s) { data.push({ value: [p.x, p.y, "-"], itemStyle: { color: t.line } }); return; }
+    const sig = sigOf.get(`${Math.min(p.x, p.y)}|${Math.max(p.x, p.y)}`);
+    data.push({ value: [p.x, p.y, +p.s.med.toFixed(2)], sig, ci: p.s.ci, itemStyle: sig ? undefined : { color: t.divMid }, label: { color: t.ink } });
   });
   const inv = state.metric === "noise", lim = inv ? 8 : 10;
   const o = baseOpt(t);
@@ -404,7 +411,7 @@ function renderPairs(t) {
   o.visualMap = { min: -lim, max: lim, calculable: false, orient: "horizontal", left: "center", bottom: 4, itemWidth: 12, itemHeight: 160,
     text: inv ? ["colonne plus bruyante", "ligne plus bruyante"] : ["ligne meilleure", "colonne meilleure"], textStyle: { color: t.ink2, fontSize: 11.5 },
     inRange: { color: inv ? divColors(t).reverse() : divColors(t) }, seriesIndex: 0 };
-  o.tooltip = { ...o.tooltip, trigger: "item", formatter: (p) => { const [x, y, v] = p.value; if (v === "-") return ""; return `<b>${ANTS[y].id} − ${ANTS[x].id}, ${CLASS_LABEL[period].toLowerCase()}</b><br>${s1(v)} dB<br><span style="color:${t.muted}">${p.data.sig ? "significatif après correction de Holm" : "non significatif"}</span>`; } };
+  o.tooltip = { ...o.tooltip, trigger: "item", formatter: (p) => { const [x, y, v] = p.value; if (v === "-") return ""; return `<b>${ANTS[y].id} − ${ANTS[x].id}, ${CLASS_LABEL[period].toLowerCase()}</b><br>${s1(v)} dB, IC 95 % ±${f1(p.data.ci)}<br><span style="color:${t.muted}">${p.data.sig ? "significatif après correction de Holm" : "non significatif"}</span>`; } };
   o.series = [{ type: "heatmap", data, label: { show: true, formatter: (p) => (p.value[2] === "-" ? "" : s1(p.value[2])), fontFamily: css("--font-mono"), fontSize: 12 }, itemStyle: { borderColor: t.surface, borderWidth: 3, borderRadius: 3 } }];
   chart("c-pairs").setOption(o, true);
   $("d-pairs").textContent = `${cap(metricWord())}, ${CLASS_NAME[state.cls]}, ${CLASS_LABEL[period].toLowerCase()}. Lire : la ligne reçoit X dB de plus que la colonne.`;
@@ -475,21 +482,21 @@ function renderSignals(t) {
   const ref = ANTS[state.ref], cmp = ANTS[state.cmp], m = margin();
   const sigs = R.signals.filter((s) => state.cls === "all" || s.class === state.cls);
   const rows = sigs.map((s) => {
-    const d = (cls) => stats(WINS.map((W, i) => {
+    const d = (cls) => test(WINS.map((W, i) => {
       if (W.cls !== cls) return null;
       const a = rawValue(s.rssi[cmp.k][i], s.floor[cmp.k][i], cmp, i, state.metric, state.view);
       const b = rawValue(s.rssi[ref.k][i], s.floor[ref.k][i], ref, i, state.metric, state.view);
       return a == null || b == null ? null : a - b;
     }));
     const dj = d("jour"), dn = d("nuit");
-    return { name: `${(s.freq_hz / 1e6).toFixed(4).replace(".", ",")} · ${CLASS_SHORT[s.class] || s.class}`, dj: dj?.med ?? null, dn: dn?.med ?? null };
+    return { name: `${(s.freq_hz / 1e6).toFixed(4).replace(".", ",")} · ${CLASS_SHORT[s.class] || s.class}`, dj: dj?.med ?? null, dn: dn?.med ?? null, cj: dj?.ci, cn: dn?.ci };
   });
   const o = baseOpt(t);
   o.grid = { left: 124, right: 18, top: 28, bottom: 40 };
   o.legend = { top: 0, right: 0, textStyle: { color: t.ink2, fontSize: 12 }, data: ["Jour", "Nuit"], itemWidth: 10, itemHeight: 10 };
   o.yAxis = { type: "category", data: rows.map((r) => r.name), inverse: true, ...axisCommon(t), axisLine: { show: false }, axisLabel: { color: t.ink2, fontFamily: css("--font-mono"), fontSize: 11.5 }, splitLine: { show: false } };
   o.xAxis = { type: "value", ...axisCommon(t), axisLabel: { color: t.muted, formatter: (v) => s1(v) }, name: `${cmp.id} − ${ref.id} (dB)`, nameLocation: "middle", nameGap: 24 };
-  const tip = (r) => `<b>${r.name} MHz</b><br>Jour : ${s1(r.dj)} dB<br>Nuit : ${s1(r.dn)} dB`;
+  const tip = (r) => `<b>${r.name} MHz</b><br>Jour : ${s1(r.dj)} dB (±${f1(r.cj)})<br>Nuit : ${s1(r.dn)} dB (±${f1(r.cn)})`;
   o.tooltip = { ...o.tooltip, trigger: "item" };
   o.series = [
     { type: "custom", name: "liaison", silent: true, data: rows.map((r, i) => [i, r.dj, r.dn]), encode: { y: 0, x: [1, 2] },
@@ -579,6 +586,40 @@ function renderStatic() {
   }
 }
 
+/* ---------- Qualité des données et export ---------- */
+const pct = (k, n) => (n ? `${NF1.format((100 * k) / n).replace(",0", "")} %` : "—");
+function renderQuality() {
+  const q = R.quality;
+  if (!q) { $("sec-data").hidden = true; return; }
+  const total = (c) => c.saturation + c.lost + c.misaligned;
+  $("quality-table").innerHTML = `<thead><tr><th>Antenne</th><th class="num">Mesures</th><th class="num">Saturation</th><th class="num">Perte de flux</th>${R.campaign.reception_mode === "simultaneous" ? `<th class="num">Désalignée (voix)</th>` : ""}<th class="num">Mises à l'écart</th><th class="num">Signal absent</th></tr></thead><tbody>` +
+    q.channels.map((c) => {
+      const a = ANTS[c.idx] || { id: "?", name: "" };
+      return `<tr><td>${dot(colorOf(a))}${a.id} · ${a.name}</td><td class="num">${NF0.format(c.n)}</td><td class="num">${pct(c.saturation, c.n)}</td><td class="num">${pct(c.lost, c.n)}</td>${R.campaign.reception_mode === "simultaneous" ? `<td class="num">${pct(c.misaligned, c.n)}</td>` : ""}<td class="num"><b>${pct(total(c), c.n)}</b></td><td class="num">${pct(c.absent, c.n)}</td></tr>`;
+    }).join("") + "</tbody>";
+  $("quality-note").textContent = `${q.demo ? "Chiffres de démonstration. " : ""}Une mesure = un signal, une antenne, une période. Les mesures saturées, à flux interrompu${R.campaign.reception_mode === "simultaneous" ? " ou désalignées (voix seulement)" : ""} sont exclues des agrégats ; « signal absent » (SNR sous le seuil de présence) n'est pas une erreur : la mesure est gardée pour le plancher de bruit.`;
+  const intr = q.interruptions;
+  const fmtI = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const dur = (a) => { const m = Math.round(((a.end_ms || Date.now()) - a.start_ms) / 60000); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; };
+  const lost = intr.reduce((s, a) => s + ((a.end_ms || Date.now()) - a.start_ms), 0);
+  $("interruptions").innerHTML = !intr.length ? `<p class="desc">Aucune interruption.</p>`
+    : `<p class="desc">${intr.length} interruption${intr.length > 1 ? "s" : ""}, ${dur({ start_ms: 0, end_ms: lost })} au total.</p><ul class="intr">${intr.slice(0, 12).map((a) => `<li><b>${fmtI.format(a.start_ms)}</b> · ${dur(a)}${a.reason ? ` · ${a.reason.replace(/[<>&]/g, "")}` : ""}</li>`).join("")}${intr.length > 12 ? `<li>… et ${intr.length - 12} autres</li>` : ""}</ul>`;
+  renderExport();
+}
+function renderExport() {
+  const real = !R.campaign.demo;
+  $("export-card").hidden = !real;
+  if (!real) return;
+  const dialect = $("csv-dialect").value;
+  const url = (kind) => `/api/campaigns/${encodeURIComponent(R.campaign.uuid)}/export?kind=${kind}&dialect=${dialect}`;
+  $("export-links").innerHTML = `<a class="btn ghost" href="${url("aggregates")}" download>Agrégats par fenêtre</a>${R.quality.raw ? `<a class="btn ghost" href="${url("measurements")}" download>Mesures brutes</a>` : ""}`;
+}
+$("csv-dialect").addEventListener("change", () => {
+  try { localStorage.setItem("oav-csv", $("csv-dialect").value); } catch (e) { /* stockage indisponible */ }
+  renderExport();
+});
+try { const d = localStorage.getItem("oav-csv"); if (d) $("csv-dialect").value = d; } catch (e) { /* stockage indisponible */ }
+
 function fillSelects() {
   const opts = (skip, sel) => ANTS.map((a, k) => (k === skip ? "" : `<option value="${k}"${k === sel ? " selected" : ""}>${a.id} · ${a.short}</option>`)).join("");
   $("sel-ref").innerHTML = opts(-1, state.ref);
@@ -594,7 +635,7 @@ function syncButtons() {
 function renderAll() {
   if (!R) return;
   const t = T();
-  syncButtons(); fillSelects(); renderStatic(); renderSummary();
+  syncButtons(); fillSelects(); renderStatic(); renderQuality(); renderSummary();
   renderProfile(t); renderRank(t); renderBox(t); renderHeat(t); renderPairs(t); renderDeltaTS(t); renderLevels(t); renderSignals(t); renderActivity(t);
 }
 

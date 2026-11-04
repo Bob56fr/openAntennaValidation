@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.gzip import GZipMiddleware
@@ -22,6 +22,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from open_antenna_validation import __version__
 from open_antenna_validation.campaigns import CampaignNotFound, campaign_results, list_campaigns
 from open_antenna_validation.config import Antenna
+from open_antenna_validation.export import KINDS, export_csv
+from open_antenna_validation.export import filename as export_filename
 from open_antenna_validation.hardware import HardwareError
 from open_antenna_validation.service import TOPIC_SPECTRUM, TOPIC_STATUS, Station
 from open_antenna_validation.web import campaign_routes, installation_routes, qualification_routes
@@ -190,6 +192,19 @@ def create_app(station: Station, *, run_lifecycle: bool = True) -> FastAPI:
     @app.get("/api/campaigns", dependencies=[Depends(require_auth)])
     def campaigns() -> list[dict[str, Any]]:
         return list_campaigns(station.db, show_demo=station.config.demo.enabled)
+
+    @app.get("/api/campaigns/{uuid}/export", dependencies=[Depends(require_auth)])
+    def export(uuid: str, kind: str = "aggregates", dialect: str = "std") -> Response:
+        if kind not in KINDS or dialect not in ("std", "fr"):
+            raise HTTPException(status_code=400, detail="Export inconnu.")
+        try:
+            name = export_filename(station.db, uuid, kind)
+        except CampaignNotFound as exc:
+            raise HTTPException(status_code=404, detail="Campagne introuvable.") from exc
+        return StreamingResponse(
+            export_csv(station.db, uuid, kind, french=dialect == "fr"),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     @app.get("/api/campaigns/{uuid}/results", dependencies=[Depends(require_auth)])
     def results(uuid: str) -> dict[str, Any]:

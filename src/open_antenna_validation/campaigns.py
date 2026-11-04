@@ -134,8 +134,8 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
                         "width_hz": sig["width_hz"], "rssi": rssi, "floor": floor})
 
     activity = [dict(r) for r in db.query(
-        "SELECT state, start_ms, end_ms FROM activity WHERE campaign_id = ? ORDER BY start_ms",
-        (cid,),
+        "SELECT state, start_ms, end_ms, reason FROM activity WHERE campaign_id = ?"
+        " ORDER BY start_ms", (cid,),
     )]
 
     return {
@@ -157,4 +157,34 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
         "windows": {"start_ms": first, "step_ms": step, "count": count},
         "signals": signals,
         "activity": activity,
+        "quality": _quality(db, cid, n_ch, activity, params, count, len(signals)),
     }
+
+
+# Quality bits of the measurements (engine.py), in the order of the table of the page.
+QUALITY_CODES = [(1, "saturation"), (2, "lost"), (8, "misaligned"), (4, "absent")]
+
+
+def _quality(db: Database, cid: int, n_ch: int, activity: list[dict[str, Any]],
+             params: dict[str, Any], windows: int, n_signals: int) -> dict[str, Any]:
+    """Measurements set aside, per channel and per code, and interruptions."""
+    rows = {int(r["channel_idx"]): r for r in db.query(
+        "SELECT channel_idx, COUNT(*) AS n,"
+        + ", ".join(f" SUM(quality & {bit} != 0) AS {name}" for bit, name in QUALITY_CODES)
+        + " FROM measurements WHERE campaign_id = ? GROUP BY channel_idx", (cid,))}
+    channels = []
+    for k in range(n_ch):
+        r = rows.get(k)
+        channels.append({"idx": k, "n": int(r["n"]) if r else 0,
+                         **{name: int(r[name] or 0) if r else 0 for _, name in QUALITY_CODES}})
+    interruptions = [{"start_ms": a["start_ms"], "end_ms": a["end_ms"],
+                      "reason": a.get("reason") or ""}
+                     for a in activity if a["state"] == "interrupted"]
+    if params.get("demo") and not rows:
+        # Demonstrations have no raw measurements: plausible figures, marked as such.
+        n = windows * n_signals * 30
+        channels = [{"idx": k, "n": n, "saturation": n // 900 * (k % 2), "lost": n // 2500,
+                     "misaligned": n // 400 if params.get("antennas") and k else 0,
+                     "absent": n // 12} for k in range(n_ch)]
+    return {"channels": channels, "interruptions": interruptions,
+            "raw": bool(rows), "demo": bool(params.get("demo"))}

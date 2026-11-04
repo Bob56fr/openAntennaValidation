@@ -50,7 +50,7 @@ Pièges Windows : PowerShell 5.1 écrit en UTF-8 avec BOM (`Set-Content`, `Out-F
 | P3 Mode commuté, fréquences imposées | Livré avec le simulateur (D13), en attente de test sur le RSP2 Pro |
 | P4 Bande automatique | Livré avec le simulateur (D15), en attente de test sur le RSP2 Pro |
 | P5 Mode simultané | Livré avec le simulateur (D16), en attente de test sur plusieurs SDR réels |
-| P6 Résultats locaux | En partie (D11) : démonstration, liste, page de résultats sur l'API |
+| P6 Résultats locaux | Livré (D11, D17) : bootstrap par blocs, Holm, qualité des données, export CSV ; pistes FT8 en P10 |
 | P7 WordPress | À faire |
 | P8 RTL-SDR V4 et Airspy HF+ | À faire |
 | P9 Installeurs | Linux : première version (`install/linux`) ; Windows : à faire |
