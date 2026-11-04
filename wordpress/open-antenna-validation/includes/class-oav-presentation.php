@@ -35,6 +35,11 @@ class OAV_Presentation
     /** Markdown source: cache, GitHub, last good copy, copy shipped with the plugin. */
     public static function source(bool $fresh = false): string
     {
+        // A new version of the plugin may read what the cached text could not (images): fresh read.
+        if (get_option('oav_presentation_version') !== OAV_VERSION) {
+            update_option('oav_presentation_version', OAV_VERSION, false);
+            $fresh = true;
+        }
         $cached = $fresh ? false : get_transient(self::CACHE);
         if (is_string($cached) && $cached !== '') {
             return $cached;
