@@ -38,11 +38,14 @@ CLASS_PRIORITY = {"carrier": 3, "digital": 2, "ssb": 1, "am_fm": 1}
 
 
 def survey(
-    driver: SdrDriver, seconds: float, fft_size: int, slice_s: float = 0.5
+    driver: SdrDriver, seconds: float, fft_size: int, slice_s: float = 0.5,
+    inputs: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Alternate the inputs, one slice each; returns the per-input spectrograms (linear)."""
-    device = driver.detect()[0]
-    inputs = driver.antennas(device)[:2] or [""]
+    """Alternate the inputs (default: the first two of the SDR), one slice each; returns the
+    per-input spectrograms (linear)."""
+    if not inputs:
+        device = driver.detect()[0]
+        inputs = driver.antennas(device)[:2] or [""]
     rate = driver.sample_rate()
     n = int(rate * slice_s)
     skip = int(rate * 0.05)

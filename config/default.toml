@@ -18,12 +18,17 @@ antenna = ""                  # RSP2 : A ou B ; RSPdx : A, B ou C ; vide : défa
 ppm = 0.0
 bias_tee = false
 # gain_step = 20              # pas de gain retenu avant une campagne
+others = []                   # mode simultané : les autres SDR ([[hardware.others]] : serial, antenna)
 
 [hardware.sdrplay]
 lna_state = 0                 # état LNA fixe pendant une série de mesures
 library_path = ""             # vide : emplacements d'installation standard
 
 [hardware.simulated]
+serial = "SIM0001"
+signal_offset_db = 0.0        # antenne de ce SDR par rapport à l'air (signaux)…
+noise_offset_db = 0.0         # …et bruit
+gain_error_db = 0.0           # erreur de gain du récepteur (corrigée par l'étalonnage)
 noise_dbfs = -95.0            # plancher de bruit de l'antenne A
 air_center_hz = 7100000.0     # les signaux simulés sont à cette fréquence + leur décalage
 seed = 1
@@ -172,6 +177,10 @@ max_signals = 8               # signaux suivis au plus
 reevaluate_s = 3600.0         # nouveau relevé de la bande toutes les N s
 calm_probe_s = 300.0          # bande calme : nouveau relevé toutes les N s…
 calm_period_s = 60.0          # …et une mesure toutes les N s seulement
+align_tolerance_ms = 5.0      # mode simultané : écart maximal entre SDR pour apparier la voix
+load_test_s = 30.0            # test de charge avant lancement
+load_ok = 0.7                 # charge (part d'un cœur, ou de la machine) : OK en dessous…
+load_max = 0.85               # …lancement possible après acceptation en dessous, refus au-delà
 # (durée de campagne jusqu'à N heures, fenêtre d'agrégation en secondes)
 windows = [[1.0, 10.0], [24.0, 60.0], [168.0, 300.0], [1000000000.0, 900.0]]
 

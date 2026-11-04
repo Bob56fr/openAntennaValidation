@@ -60,6 +60,12 @@ def _default_simulated_signals() -> list[SimulatedSignal]:
 
 
 class SimulatedConfig(_Section):
+    serial: str = "SIM0001"
+    # This SDR's antenna compared with the air (signals, noise), and a gain error of the
+    # receiver itself (what the calibration of the simultaneous mode removes).
+    signal_offset_db: float = 0.0
+    noise_offset_db: float = 0.0
+    gain_error_db: float = 0.0
     noise_dbfs: float = -95.0
     # The simulated signals sit at this frequency plus their offset, whatever the tuning.
     air_center_hz: float = 7_100_000.0
@@ -79,6 +85,18 @@ class SimulatedConfig(_Section):
     switch_settle_ms: float = Field(default=1.6, ge=0.0)
 
 
+class SdrSlot(_Section):
+    """Another SDR of the station (simultaneous mode: one SDR per antenna)."""
+
+    serial: str
+    # RSP2: input used by this SDR (empty: the device default).
+    antenna: Antenna = ""
+    # Simulated driver only: how this SDR sees the air (see SimulatedConfig).
+    sim_signal_offset_db: float = 0.0
+    sim_noise_offset_db: float = 0.0
+    sim_gain_error_db: float = 0.0
+
+
 class HardwareConfig(_Section):
     driver: Literal["sdrplay", "simulated"] = "sdrplay"
     # Empty: first device detected by the driver.
@@ -93,6 +111,17 @@ class HardwareConfig(_Section):
     gain_step: int | None = Field(default=None, ge=0)
     sdrplay: SdrplayConfig = Field(default_factory=SdrplayConfig)
     simulated: SimulatedConfig = Field(default_factory=SimulatedConfig)
+    # The other SDRs of the station, for the simultaneous mode (up to 9 more).
+    others: list[SdrSlot] = Field(default_factory=list, max_length=9)
+
+    def for_slot(self, slot: SdrSlot) -> HardwareConfig:
+        """Settings of the worker that drives ``slot``: same driver and gain, its own serial."""
+        sim = self.simulated.model_copy(update={
+            "serial": slot.serial, "signal_offset_db": slot.sim_signal_offset_db,
+            "noise_offset_db": slot.sim_noise_offset_db,
+            "gain_error_db": slot.sim_gain_error_db})
+        return self.model_copy(update={"serial": slot.serial, "antenna": slot.antenna,
+                                       "simulated": sim, "others": []})
 
 
 class Band(_Section):
@@ -204,6 +233,13 @@ class CampaignConfig(_Section):
     # Band calm: re-survey this often (automatic mode) and measure at this slower period.
     calm_probe_s: float = Field(default=300.0, ge=10.0)
     calm_period_s: float = Field(default=60.0, ge=1.0, le=600.0)
+    # Simultaneous mode: largest spread between the SDRs for pairing voices (SSB, AM/FM).
+    align_tolerance_ms: float = Field(default=5.0, gt=0.0)
+    # Test before launch: duration, and load of a worker (share of one core) or of the
+    # station (share of all cores): usable below ok, possible after acceptance below max.
+    load_test_s: float = Field(default=30.0, ge=2.0, le=600.0)
+    load_ok: float = Field(default=0.7, gt=0.0, le=1.0)
+    load_max: float = Field(default=0.85, gt=0.0, le=1.0)
 
 
 class DemoConfig(_Section):

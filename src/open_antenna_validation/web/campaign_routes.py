@@ -24,10 +24,13 @@ class FrequencyBody(BaseModel):
 
 class ChannelBody(BaseModel):
     antenna_id: int
+    # Simultaneous mode: the SDR that receives this antenna.
+    serial: str | None = None
 
 
 class CampaignBody(BaseModel):
     title: str = ""
+    reception: Literal["switched", "simultaneous"] = "switched"
     mode: Literal["fixed", "auto"] = "fixed"
     frequencies: list[FrequencyBody] = Field(default_factory=list)
     low_hz: float | None = Field(default=None, gt=0)
@@ -39,13 +42,20 @@ class CampaignBody(BaseModel):
     rate_hz: float | None = Field(default=None, gt=0, le=200)
     aa: bool = False
     accept_limits: bool = False
+    accept_load: bool = False
+
+
+class LoadTestBody(BaseModel):
+    serials: list[str] = Field(default_factory=list)
 
 
 def build_router(station: Station) -> APIRouter:
     router = APIRouter(prefix="/api/campaign", dependencies=[Depends(require_auth)])
 
-    def profile_summary(band: str) -> dict[str, Any] | None:
-        p = cm.active_profile(station.db, station.receiver.get("identity"), band)
+    def profile_summary(band: str, identities: list[str | None] | None = None
+                        ) -> dict[str, Any] | None:
+        p = cm.active_profile(station.db, identities if identities is not None
+                              else station.receiver.get("identity"), band)
         if p is None:
             return None
         margins = json.loads(p["margins_json"])
@@ -72,8 +82,27 @@ def build_router(station: Station) -> APIRouter:
             "reevaluate_s": cfg.campaign.reevaluate_s,
             "profiles": {b.name: profile_summary(b.name) for b in cfg.bands},
             "disk_free_bytes": free,
+            "load_test_s": cfg.campaign.load_test_s,
             "campaign": station.campaign_report(),
         }
+
+    @router.get("/profiles")
+    def profiles(serials: str) -> dict[str, Any]:
+        """Calibration of a set of SDRs (simultaneous mode), in channel order, per band."""
+        by_serial = {d["serial"]: d for d in station.devices_report()}
+        identities = [by_serial.get(s, {}).get("identity") for s in serials.split(",")]
+        return {b.name: profile_summary(b.name, identities) for b in station.config.bands}
+
+    @router.post("/loadtest")
+    def load_test(body: LoadTestBody) -> dict[str, Any]:
+        try:
+            return station.start_load_test(body.serials or None)
+        except (cm.CampaignError, HardwareError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.get("/loadtest")
+    def load_test_state() -> dict[str, Any]:
+        return {"load_test": station.load_report()}
 
     @router.post("")
     def start(body: CampaignBody) -> dict[str, Any]:

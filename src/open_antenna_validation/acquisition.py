@@ -222,7 +222,8 @@ def run_survey(driver: SdrDriver, request: dict[str, Any]) -> Event:
     """Survey of the band of an automatic campaign, then detection (in the worker)."""
     try:
         driver.set_frequency(float(request["sdr_hz"]))
-        raw = detect.survey(driver, float(request["seconds"]), int(request["fft_size"]))
+        raw = detect.survey(driver, float(request["seconds"]), int(request["fft_size"]),
+                            inputs=request.get("inputs"))
         result = detect.detect(
             raw["grams"], raw["rate"], raw["fft_size"], raw["sdr_hz"],
             low_hz=float(request["low_hz"]), high_hz=float(request["high_hz"]),

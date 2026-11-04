@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 import threading
+import uuid as uuidlib
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +20,7 @@ from open_antenna_validation.config import (
     Antenna,
     Config,
     HardwareConfig,
+    SdrSlot,
     load_config,
     resolve_path,
     save_config,
@@ -38,6 +43,20 @@ HF_RANGE_HZ = (1_000_000.0, 30_000_000.0)
 # Retry after a failure or while no SDR is plugged in: 5 s, doubled up to 1 min.
 RESTART_DELAY_S = 5.0
 RESTART_MAX_S = 60.0
+# A load test stays valid this long for launching a simultaneous campaign.
+LOAD_VALID_MS = 3_600_000
+
+
+@dataclass
+class _Device:
+    """Another SDR of the station (simultaneous mode), with its own acquisition worker."""
+
+    slot: SdrSlot
+    acq: Acquisition | None = None
+    receiver: dict[str, Any] = field(default_factory=lambda: {"state": "stopped"})
+    identity: IdentityCheck | None = None
+    restart: threading.Timer | None = None
+    retry_s: float = RESTART_DELAY_S
 
 
 class Station:
@@ -71,6 +90,9 @@ class Station:
         # Campaign in progress (state running or interrupted), if any.
         self.campaign: cm.Running | None = None
         self._campaign_lock = threading.RLock()
+        # The other SDRs (simultaneous mode), and the load test in progress or the last one.
+        self._others = [_Device(slot) for slot in config.hardware.others]
+        self.load_test: dict[str, Any] | None = None
 
     @classmethod
     def from_home(
@@ -101,6 +123,8 @@ class Station:
         self._resume_campaign()
         self._running = True
         self._start_acquisition()
+        for dev in self._others:
+            self._start_other(dev)
 
     def shutdown(self) -> None:
         self._running = False
@@ -108,8 +132,17 @@ class Station:
             self._restart.cancel()
         with self._lock:
             acq, self._acq = self._acq, None
+            others = [(d, d.acq) for d in self._others]
+            for d in self._others:
+                d.acq = None
         if acq is not None:
             acq.stop()
+        for d, other in others:
+            if d.restart is not None:
+                d.restart.cancel()
+            if other is not None:
+                other.stop()
+            d.receiver = {**d.receiver, "state": "stopped"}
         self.receiver = {**self.receiver, "state": "stopped"}
         self.db.log_event("service_stop", {})
 
@@ -124,6 +157,36 @@ class Station:
             self._acq = acq
         acq.start()
         self._publish_status()
+
+    def _start_other(self, dev: _Device) -> None:
+        cfg = self.config
+        dev.receiver = {"state": "starting", "driver": cfg.hardware.driver,
+                        "device": {"serial": dev.slot.serial}}
+        acq = Acquisition(
+            cfg.hardware.for_slot(dev.slot), cfg.receiver, cfg.spectrum,
+            lambda event: self._on_other_event(dev, event),
+            inline=self._inline, driver_factory=self._factory,
+        )
+        with self._lock:
+            dev.acq = acq
+        acq.start()
+
+    def _restart_other(self, dev: _Device) -> None:
+        if not self._running:
+            return
+        with self._lock:
+            acq, dev.acq = dev.acq, None
+        if acq is not None:
+            acq.stop()
+        self._start_other(dev)
+
+    def _schedule_other_restart(self, dev: _Device) -> None:
+        if not self._running:
+            return
+        dev.restart = threading.Timer(dev.retry_s, self._restart_other, (dev,))
+        dev.restart.daemon = True
+        dev.restart.start()
+        dev.retry_s = min(RESTART_MAX_S, dev.retry_s * 2)
 
     def _schedule_restart(self) -> None:
         if not self._running:
@@ -153,31 +216,42 @@ class Station:
                              (run.id,))[0][0]
         if now_ms() >= run.planned_end_ms:
             end = min(run.planned_end_ms, int(last or run.planned_end_ms))
-            cm.finish(self.db, run, "done", end)
+            cm.finish(self.db, run, "done", end, self.config)
             return
         self.campaign = run
         # The station was off: the gap is an interruption, closed when the engine restarts.
         self._interrupt(int(last) if last else now_ms(), "Service arrêté")
 
-    def _interrupt(self, ts: int, reason: str) -> None:
+    def _interrupt(self, ts: int, reason: str, serial: str | None = None) -> None:
+        """Interruption of the campaign (``serial``: the SDR that failed, None: the main one)."""
         run = self.campaign
         if run is None or run.interrupted_since is not None:
             return
+        if serial is not None and serial not in self._run_serials(run):
+            return  # an SDR the campaign does not use
         run.interrupted_since = ts
         run.engine_started = False
         cm.switch_activity(self.db, run, "interrupted", ts, reason)
         with self.db.transaction() as conn:
             conn.execute("UPDATE campaigns SET state = 'interrupted' WHERE id = ?", (run.id,))
+        # The other SDRs stop too: measurements are only meaningful together.
+        self._stop_engines(run)
+
+    def _run_serials(self, run: cm.Running) -> list[str]:
+        return run.devices if run.simultaneous else [self._primary_serial()]
+
+    def _ready(self, run: cm.Running) -> bool:
+        return all(self._device_state(s) == "running" for s in self._run_serials(run))
 
     def _start_engine(self) -> None:
         run = self.campaign
-        if run is None or self.receiver.get("state") != "running":
+        if run is None or not self._ready(run):
             return
         if run.auto and run.last_survey_ms is None:
             # First start, or after a restart: survey the band before measuring.
             self._start_survey()
         else:
-            self._send("campaign_start", cm.engine_spec(run, self.config))
+            self._start_engines(run)
         if run.interrupted_since is not None:
             run.interrupted_since = None
             run.calm = False
@@ -188,12 +262,38 @@ class Station:
         # Last: whoever sees the engine started sees the campaign running in the database.
         run.engine_started = True
 
+    def _start_engines(self, run: cm.Running) -> None:
+        """(Re)start the measurement on every SDR of the campaign, on one time grid."""
+        if not run.simultaneous:
+            self._send("campaign_start", cm.engine_spec(run, self.config))
+            return
+        start = cm.engine_start_ms(run)
+        for k, serial in enumerate(run.devices):
+            self._send_to(serial, "campaign_start", cm.engine_spec(run, self.config, k, start))
+
+    def _stop_engines(self, run: cm.Running, only: str | None = None) -> None:
+        for serial in self._run_serials(run):
+            if only is not None and serial != only:
+                continue
+            if self._device_state(serial) == "running":
+                try:
+                    self._send_to(serial, "campaign_stop", None)
+                except HardwareError:
+                    log.warning("Arrêt de la mesure sur %s", serial)
+
     def _start_survey(self) -> None:
         run = self.campaign
         if run is None:
             return
         run.surveying = True
-        self._send("survey", cm.survey_request(run, self.config))
+        request = cm.survey_request(run, self.config)
+        if run.simultaneous:
+            # The first SDR surveys the band on its own input; the others wait.
+            for serial in run.devices[1:]:
+                self._stop_engines(run, serial)
+            self._send_to(run.devices[0], "survey", request)
+        else:
+            self._send("survey", request)
         self._publish_status()
 
     def _on_survey(self, event: Event) -> None:
@@ -209,15 +309,21 @@ class Station:
             else:
                 run.last_survey_ms = ts  # retried at the next re-evaluation
                 self.db.log_event("error", {"survey": run.uuid, "message": event["message"]})
-            if self.receiver.get("state") == "running":
-                self._send("campaign_start", cm.engine_spec(run, self.config))
+            if self._ready(run):
+                self._start_engines(run)
         self._publish_status()
 
     def start_campaign(self, request: dict[str, Any]) -> str:
         with self._campaign_lock:
             if self.bench.get("busy"):
                 raise cm.CampaignError("Une mesure du banc est en cours.")
-            uuid = cm.create_campaign(self.db, self.config, self.receiver, request)
+            if (self.load_test or {}).get("state") == "running":
+                raise cm.CampaignError("Le test de charge est en cours.")
+            if request.get("reception") == "simultaneous":
+                self._check_load(request)
+            free = shutil.disk_usage(self.db.path.parent).free
+            uuid = cm.create_campaign(self.db, self.config, self.receiver, request,
+                                      devices=self.devices_report(), free_bytes=free)
             self.campaign = cm.load_running(self.db)
             self._start_engine()
         self._publish_status()
@@ -228,34 +334,43 @@ class Station:
             run = self.campaign
             if run is None:
                 raise cm.CampaignError("Aucune campagne en cours.")
-            if run.engine_started and self.receiver.get("state") == "running":
-                self._send("campaign_stop", None)
-            cm.finish(self.db, run, "abandoned", now_ms())
+            if run.engine_started:
+                self._stop_engines(run)
+            cm.finish(self.db, run, "abandoned", now_ms(), self.config)
             self.campaign = None
         self._publish_status()
 
     def _on_measurement(self, event: Event) -> None:
+        load = self.load_test
+        if load is not None and event.get("campaign") == load["id"]:
+            self._collect_load(event)
+            return
         with self._campaign_lock:
             run = self.campaign
             if run is None or event.get("campaign") != run.uuid:
                 return
+            ts = int(event["ts_ms"])
+            period = int(event["period_ms"])
+            if ts >= run.planned_end_ms:
+                return  # an SDR a little ahead of the others, past the end
             calm_before = run.calm
             cm.store_measurements(self.db, self.config, run, event)
-            ts = int(event["ts_ms"])
-            if ts + int(event["period_ms"]) >= run.planned_end_ms:
-                if self.receiver.get("state") == "running":
-                    self._send("campaign_stop", None)
+            if run.simultaneous and ts + period >= run.planned_end_ms:
+                self._stop_engines(run, event.get("serial"))  # this SDR is done
+            done = cm.all_reported(run) if run.simultaneous else ts
+            if done + period >= run.planned_end_ms:
+                self._stop_engines(run)
                 # Closed in the database first: whoever sees no campaign sees it finished.
-                cm.finish(self.db, run, "done", run.planned_end_ms)
+                cm.finish(self.db, run, "done", run.planned_end_ms, self.config)
                 self.campaign = None
                 log.info("Campagne %s terminée", run.uuid)
             elif run.auto and not run.surveying and run.last_survey_ms is not None and (
                 ts - run.last_survey_ms >= 1000 * (self.config.campaign.calm_probe_s if run.calm
                                                    else self.config.campaign.reevaluate_s)):
                 self._start_survey()
-            elif run.calm != calm_before and self.receiver.get("state") == "running":
+            elif run.calm != calm_before and self._ready(run):
                 # Calm band: slower measurements (and back to normal when it wakes up).
-                self._send("campaign_start", cm.engine_spec(run, self.config))
+                self._start_engines(run)
         self._publish_status()
 
     def campaign_report(self) -> dict[str, Any] | None:
@@ -271,7 +386,86 @@ class Station:
                 "last_ms": last, "calm": run.calm, "aa": bool(run.params.get("aa")),
                 "signals": len([s for s in run.signals if s["class"] != "noise"]),
                 "rate_hz": run.params["rate_hz"], "auto": run.auto,
-                "surveying": run.surveying, "last_survey_ms": run.last_survey_ms}
+                "surveying": run.surveying, "last_survey_ms": run.last_survey_ms,
+                "reception": run.reception, "devices": run.devices,
+                "alignment_ms": _percentiles(run.align_ms)}
+
+    # --- load test ------------------------------------------------------------------
+
+    def start_load_test(self, serials: list[str] | None = None) -> dict[str, Any]:
+        """Run the measurement on every SDR at full load (most signals, shortest period)
+        for a while, and judge whether the computer keeps up."""
+        with self._campaign_lock:
+            if self.campaign is not None:
+                raise cm.CampaignError("Une campagne est en cours.")
+            if self.bench.get("busy"):
+                raise cm.CampaignError("Une mesure du banc est en cours.")
+            if (self.load_test or {}).get("state") == "running":
+                raise cm.CampaignError("Le test de charge est déjà en cours.")
+            devices = [d for d in self.devices_report() if d.get("state") == "running"
+                       and (not serials or d["serial"] in serials)]
+            if not devices:
+                raise cm.CampaignError("Aucun SDR en marche pour le test de charge.")
+            seconds = self.config.campaign.load_test_s
+            test_id = f"loadtest-{uuidlib.uuid4()}"
+            self.load_test = {"id": test_id, "state": "running", "started_ms": now_ms(),
+                              "seconds": seconds, "serials": [d["serial"] for d in devices],
+                              "samples": {d["serial"]: [] for d in devices}}
+            for d in devices:
+                self._send_to(d["serial"], "campaign_start",
+                              cm.load_test_spec(self.config, d, test_id))
+            timer = threading.Timer(seconds, self._finish_load_test, (test_id,))
+            timer.daemon = True
+            timer.start()
+        self._publish_status()
+        return self.load_report() or {}
+
+    def _collect_load(self, event: Event) -> None:
+        load = self.load_test
+        if load is None or load["state"] != "running":
+            return
+        samples = load["samples"].get(event.get("serial"))
+        if samples is not None:
+            samples.append((float(event.get("cpu_s") or 0.0),
+                            float(event.get("audio_s") or 0.0), int(event.get("dropped") or 0)))
+
+    def _finish_load_test(self, test_id: str) -> None:
+        with self._campaign_lock:
+            load = self.load_test
+            if load is None or load["id"] != test_id or load["state"] != "running":
+                return
+            for serial in load["serials"]:
+                if self._device_state(serial) == "running":
+                    try:
+                        self._send_to(serial, "campaign_stop", None)
+                    except HardwareError:
+                        log.warning("Fin du test de charge sur %s", serial)
+            load.update(judge_load(load["samples"], self.config, os.cpu_count() or 1,
+                                   inline=self._inline))
+            load["state"] = "done"
+            load["ended_ms"] = now_ms()
+            self.db.log_event("load_test", {k: v for k, v in load.items() if k != "samples"})
+        self._publish_status()
+
+    def load_report(self) -> dict[str, Any] | None:
+        load = self.load_test
+        if load is None:
+            return None
+        return {k: v for k, v in load.items() if k != "samples"}
+
+    def _check_load(self, request: dict[str, Any]) -> None:
+        serials = [str(c.get("serial")) for c in request.get("channels") or []]
+        load = self.load_test
+        if load is None or load.get("state") != "done" \
+                or now_ms() - int(load["ended_ms"]) > LOAD_VALID_MS \
+                or not set(serials) <= set(load["serials"]):
+            raise cm.CampaignError(
+                "Faites d'abord le test de charge avec ces SDR (valable une heure).")
+        if load["verdict"] == "refuse":
+            raise cm.CampaignError("Test de charge : l'ordinateur ne suit pas. " + load["message"])
+        if load["verdict"] == "limit" and not request.get("accept_load"):
+            raise cm.CampaignError("Test de charge à la limite : confirmez pour lancer quand "
+                                   "même. " + load["message"])
 
     # --- events from the worker --------------------------------------------------
 
@@ -309,7 +503,7 @@ class Station:
             self.db.log_event("gain_change", {"gain_index": event["gain_index"]})
             self._publish_status()
         elif kind == "measurement":
-            self._on_measurement(event)
+            self._on_measurement({**event, "serial": self._primary_serial()})
         elif kind in ("survey_result", "survey_error"):
             self._on_survey(event)
         elif kind == "campaign_error":
@@ -317,7 +511,7 @@ class Station:
             self.db.log_event("error", {"campaign": event["campaign"],
                                         "message": event["message"]})
             if self.campaign is not None:
-                self._interrupt(now_ms(), event["message"])
+                self._interrupt(now_ms(), event["message"], self._primary_serial())
             self._publish_status()
         elif kind in ("bench_result", "bench_error"):
             if kind == "bench_result":
@@ -339,16 +533,70 @@ class Station:
                 self.db.log_event("sdr_absent" if state == "absent" else "error",
                                   {"message": event["message"]})
                 log.warning("Acquisition : %s", event["message"])
-            self._interrupt(now_ms(), event["message"])
+            self._interrupt(now_ms(), event["message"], self._primary_serial())
             self._publish_status()
             if event.get("fatal"):
                 self._schedule_restart()
         elif kind == "closed" and self.receiver.get("state") == "running" and self._running:
-            self._interrupt(now_ms(), "Acquisition arrêtée")
+            self._interrupt(now_ms(), "Acquisition arrêtée", self._primary_serial())
             self.receiver["state"] = "error"
             self.receiver["error"] = "Acquisition arrêtée de façon inattendue."
             self._publish_status()
             self._schedule_restart()
+
+    def _on_other_event(self, dev: _Device, event: Event) -> None:
+        """Events of another SDR: measurements, state; its spectrum is not displayed."""
+        kind = event.get("type")
+        serial = dev.slot.serial
+        r = dev.receiver
+        if kind == "spectrum":
+            r.update(antenna=event["antenna"], center_hz=event["center_hz"],
+                     dropped=event["dropped"], overload=event["overload"],
+                     clip_alert=event["clip_alert"])
+        elif kind == "opened":
+            dev.retry_s = RESTART_DELAY_S
+            device = DeviceInfo(**event["device"])
+            dev.identity = record_hardware(self.db, device, event["antenna"], event["gain_mode"])
+            dev.receiver = {"state": "running", **{k: v for k, v in event.items() if k != "type"},
+                            "identity": dev.identity.identity,
+                            "identity_changed": dev.identity.changed}
+            log.info("SDR ouvert : %s %s", device.model, device.serial)
+            if self.campaign is not None:
+                try:
+                    with self._campaign_lock:
+                        self._start_engine()
+                except HardwareError:
+                    log.exception("Reprise de la campagne")
+            self._publish_status()
+        elif kind == "measurement":
+            self._on_measurement({**event, "serial": serial})
+        elif kind in ("survey_result", "survey_error"):
+            self._on_survey(event)
+        elif kind == "campaign_error":
+            log.error("Campagne (%s) : %s", serial, event["message"])
+            self.db.log_event("error", {"campaign": event["campaign"], "serial": serial,
+                                        "message": event["message"]})
+            self._interrupt(now_ms(), f"SDR {serial} : {event['message']}", serial)
+            self._publish_status()
+        elif kind == "error":
+            state = "absent" if event.get("absent") else "error"
+            changed = (r.get("state"), r.get("error")) != (state, event["message"])
+            dev.receiver = {**r, "state": state, "error": event["message"],
+                            "help_url": event.get("help_url")}
+            if changed:
+                self.db.log_event("sdr_absent" if state == "absent" else "error",
+                                  {"serial": serial, "message": event["message"]})
+                log.warning("Acquisition %s : %s", serial, event["message"])
+            self._interrupt(now_ms(), f"SDR {serial} : {event['message']}", serial)
+            self._publish_status()
+            if event.get("fatal"):
+                self._schedule_other_restart(dev)
+        elif kind == "closed" and r.get("state") == "running" and self._running:
+            self._interrupt(now_ms(), f"SDR {serial} : acquisition arrêtée", serial)
+            dev.receiver = {**r, "state": "error",
+                            "error": "Acquisition arrêtée de façon inattendue."}
+            self._publish_status()
+            self._schedule_other_restart(dev)
 
     def _publish_status(self) -> None:
         self.hub.publish(TOPIC_STATUS, self.hardware_report())
@@ -362,9 +610,36 @@ class Station:
             raise HardwareError("Le récepteur n'est pas en marche.")
         acq.send(name, value)
 
+    def _primary_serial(self) -> str:
+        hw = self.config.hardware
+        return str((self.receiver.get("device") or {}).get("serial") or hw.serial
+                   or (hw.simulated.serial if hw.driver == "simulated" else ""))
+
+    def _other(self, serial: str | None) -> _Device | None:
+        return next((d for d in self._others if d.slot.serial == serial), None)
+
+    def _device_state(self, serial: str | None) -> str | None:
+        if serial == self._primary_serial():
+            return self.receiver.get("state")
+        dev = self._other(serial)
+        return None if dev is None else dev.receiver.get("state")
+
+    def _send_to(self, serial: str | None, name: str, value: Any) -> None:
+        if serial == self._primary_serial():
+            self._send(name, value)
+            return
+        dev = self._other(serial)
+        with self._lock:
+            acq = None if dev is None else dev.acq
+        if dev is None or acq is None or dev.receiver.get("state") != "running":
+            raise HardwareError(f"Le SDR n° {serial} n'est pas en marche.")
+        acq.send(name, value)
+
     def _no_campaign(self) -> None:
         if self.campaign is not None:
             raise HardwareError("Une campagne est en cours : le récepteur est réservé à la mesure.")
+        if (self.load_test or {}).get("state") == "running":
+            raise HardwareError("Le test de charge est en cours.")
 
     def set_antenna(self, antenna: Antenna) -> None:
         self._no_campaign()
@@ -436,4 +711,61 @@ class Station:
             "overload": r.get("overload", False),
             "clip_alert": r.get("clip_alert", False),
             "campaign": self.campaign_report(),
+            "devices": [{k: v for k, v in d.items() if k not in ("antennas", "gain_steps")}
+                        for d in self.devices_report()],
+            "load_test": self.load_report(),
         }
+
+    def devices_report(self) -> list[dict[str, Any]]:
+        """Every SDR of the station, the main one first (simultaneous mode)."""
+        out = []
+        for primary, r in [(True, self.receiver)] + [(False, d.receiver) for d in self._others]:
+            device = r.get("device") or {}
+            serial = self._primary_serial() if primary else str(device.get("serial", ""))
+            out.append({
+                "serial": serial, "primary": primary, "state": r.get("state"),
+                "device": {**device, "serial": serial}, "model": device.get("model"),
+                "error": r.get("error"), "input": r.get("antenna") or "",
+                "antennas": r.get("antennas", []), "gain_steps": r.get("gain_steps", []),
+                "gain_index": r.get("gain_index"), "identity": r.get("identity"),
+                "bandwidth_hz": r.get("bandwidth_hz"), "sample_rate": r.get("sample_rate"),
+                "center_hz": r.get("center_hz"), "dropped": r.get("dropped", 0),
+                "overload": r.get("overload", False)})
+        return out
+
+
+def _percentiles(values: list[float]) -> dict[str, float] | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return {"p50": ordered[len(ordered) // 2],
+            "p99": ordered[min(len(ordered) - 1, int(len(ordered) * 0.99))]}
+
+
+def judge_load(samples: dict[str, list[tuple[float, float, int]]], cfg: Config, cores: int,
+               *, inline: bool = False) -> dict[str, Any]:
+    """Verdict of the load test. Load of a worker = processor time / signal time (one core
+    at most); station load = sum over the workers / number of cores. ``inline``: the
+    workers are threads of one process, whose processor time counts them all."""
+    c = cfg.campaign
+    loads: dict[str, float | None] = {}
+    dropped: dict[str, int] = {}
+    for serial, rows in samples.items():
+        audio = sum(r[1] for r in rows)
+        loads[serial] = round(sum(r[0] for r in rows) / audio, 3) if audio > 0 else None
+        dropped[serial] = rows[-1][2] - rows[0][2] if len(rows) > 1 else 0
+    known = [v for v in loads.values() if v is not None]
+    station = (max(known) if inline else sum(known) / cores) if known else None
+    worst = max([*known, station or 0.0]) if known else None
+    lost = sum(dropped.values())
+    if worst is None or len(known) < len(loads):
+        verdict, message = "refuse", "Un SDR n'a fourni aucune mesure pendant le test."
+    elif worst >= c.load_max:
+        verdict, message = "refuse", f"Charge {worst:.0%} : au-delà de {c.load_max:.0%}."
+    elif worst >= c.load_ok or lost:
+        verdict = "limit"
+        message = f"Charge {worst:.0%}" + (f", {lost} échantillons perdus" if lost else "") + "."
+    else:
+        verdict, message = "ok", f"Charge {worst:.0%} : l'ordinateur suit sans difficulté."
+    return {"verdict": verdict, "message": message, "loads": loads, "station_load": station,
+            "dropped": dropped, "cores": cores}

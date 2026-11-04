@@ -81,6 +81,8 @@ def hardware_identity(device: DeviceInfo, antenna: str, gain_mode: str) -> str:
 
 class SdrDriver(ABC):
     name: ClassVar[str]
+    # False for a simulator running faster than real time: its wall clock means nothing.
+    realtime: bool = True
 
     @abstractmethod
     def availability(self) -> Availability:

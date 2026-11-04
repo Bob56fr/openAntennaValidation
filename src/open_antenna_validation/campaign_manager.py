@@ -21,7 +21,7 @@ import numpy as np
 
 from open_antenna_validation.config import Config
 from open_antenna_validation.detect import same_signal, select
-from open_antenna_validation.engine import Q_ABSENT, Q_LOST, Q_SATURATION
+from open_antenna_validation.engine import Q_ABSENT, Q_LOST, Q_MISALIGNED, Q_SATURATION
 from open_antenna_validation.installation import current_chain
 from open_antenna_validation.storage import Database
 from open_antenna_validation.timeutil import now_ms
@@ -30,8 +30,11 @@ log = logging.getLogger(__name__)
 
 CLASSES = ("carrier", "digital", "ssb", "am_fm")
 INPUTS = "ABCDEFGHIJ"
-EXCLUDED = Q_SATURATION | Q_LOST
+EXCLUDED = Q_SATURATION | Q_LOST | Q_MISALIGNED
 MAX_SIGNALS = 20
+MAX_CHANNELS = 10
+VOICE = ("ssb", "am_fm")
+GIB = 1 << 30
 
 
 class CampaignError(Exception):
@@ -46,15 +49,18 @@ def window_ms_for(cfg: Config, duration_s: float) -> int:
     return int(cfg.campaign.windows[-1][1] * 1000)
 
 
-def active_profile(db: Database, identity: str | None, band: str) -> Any:
-    if not identity:
+def active_profile(db: Database, identity: str | list[str | None] | None, band: str) -> Any:
+    """Profile of one SDR (switched mode) or of a set of SDRs in channel order (simultaneous)."""
+    identities = identity if isinstance(identity, list) else [identity]
+    if not identities or not all(identities):
         return None
     rows = db.query(
-        "SELECT p.*, r.accepted_ms, r.uuid AS run_uuid, r.ended_ms FROM hardware_profiles p"
+        "SELECT p.*, r.accepted_ms, r.uuid AS run_uuid, r.ended_ms, r.kind AS run_kind"
+        " FROM hardware_profiles p"
         " JOIN qualification_runs r ON r.id = p.qualification_id"
         " WHERE p.active = 1 AND p.identities_json = ? AND p.band = ? AND"
         " (p.valid_until_ms IS NULL OR p.valid_until_ms > ?) ORDER BY p.created_ms DESC LIMIT 1",
-        (json.dumps([identity]), band, now_ms()),
+        (json.dumps(identities), band, now_ms()),
     )
     return rows[0] if rows else None
 
@@ -94,16 +100,26 @@ def dc_free_tuning(signals: list[dict[str, Any]], center: float, bandwidth: floa
 
 
 def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
-                    request: dict[str, Any]) -> str:
-    if receiver.get("state") != "running":
-        raise CampaignError("Le récepteur doit être en marche pour lancer une campagne.")
+                    request: dict[str, Any], devices: list[dict[str, Any]] | None = None,
+                    free_bytes: int | None = None) -> str:
+    """``devices``: reports of every SDR of the station (simultaneous mode), main one first."""
     if db.query("SELECT 1 FROM campaigns WHERE state IN ('running', 'interrupted')"):
         raise CampaignError("Une campagne est déjà en cours : arrêtez-la d'abord.")
-    inputs = receiver.get("antennas") or []
-    if len(inputs) < 2:
-        raise CampaignError("Le mode commuté demande un SDR à plusieurs entrées.")
+    simultaneous = request.get("reception", "switched") == "simultaneous"
+    if simultaneous:
+        sdrs = _simultaneous_sdrs(request, devices or [receiver])
+        bandwidth = min(float(d.get("bandwidth_hz") or 0) for d in sdrs)
+        inputs = [str(d.get("input") or "") for d in sdrs]
+    else:
+        if receiver.get("state") != "running":
+            raise CampaignError("Le récepteur doit être en marche pour lancer une campagne.")
+        inputs = receiver.get("antennas") or []
+        if len(inputs) < 2:
+            raise CampaignError("Le mode commuté demande un SDR à plusieurs entrées.")
+        inputs = inputs[:2]
+        sdrs = [receiver]
+        bandwidth = float(receiver.get("bandwidth_hz") or 0)
     title = str(request.get("title", "")).strip()
-    bandwidth = float(receiver.get("bandwidth_hz") or 0)
     auto = request.get("mode", "fixed") == "auto"
     max_signals = int(request.get("max_signals") or cfg.campaign.max_signals)
     if not 1 <= max_signals <= MAX_SIGNALS:
@@ -126,8 +142,29 @@ def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
     band = next((b.name for b in cfg.bands if b.low_hz <= center <= b.high_hz), "")
     if not 1e6 <= center <= 30e6:
         raise CampaignError("Les fréquences doivent être dans la bande HF (1 à 30 MHz).")
-    return _create(db, cfg, receiver, request, inputs, title, auto, max_signals, low, high,
-                   center, sdr_hz, band, signals)
+    return _create(db, cfg, request, sdrs, inputs, simultaneous, title, auto, max_signals,
+                   low, high, center, sdr_hz, band, signals, free_bytes)
+
+
+def _simultaneous_sdrs(request: dict[str, Any], devices: list[dict[str, Any]]
+                       ) -> list[dict[str, Any]]:
+    channels = request.get("channels") or []
+    if not 2 <= len(channels) <= MAX_CHANNELS:
+        raise CampaignError(f"Le mode simultané demande de 2 à {MAX_CHANNELS} SDR, "
+                            "un par antenne.")
+    by_serial = {(d.get("device") or {}).get("serial"): d for d in devices}
+    sdrs = []
+    for c in channels:
+        serial = c.get("serial")
+        d = by_serial.get(serial)
+        if d is None:
+            raise CampaignError(f"SDR inconnu : {serial}.")
+        if d.get("state") != "running":
+            raise CampaignError(f"Le SDR n° {serial} n'est pas en marche.")
+        sdrs.append(d)
+    if len({c.get("serial") for c in channels}) != len(channels):
+        raise CampaignError("Un SDR par antenne : chaque SDR ne peut servir qu'une fois.")
+    return sdrs
 
 
 def _fixed_frequencies(cfg: Config, request: dict[str, Any], bandwidth: float
@@ -155,26 +192,29 @@ def _fixed_frequencies(cfg: Config, request: dict[str, Any], bandwidth: float
     return low, high, center, dc_free_tuning(signals, center, bandwidth), signals
 
 
-def _create(db: Database, cfg: Config, receiver: dict[str, Any], request: dict[str, Any],
-            inputs: list[str], title: str, auto: bool, max_signals: int, low: float,
-            high: float, center: float, sdr_hz: float, band: str,
-            signals: list[dict[str, Any]]) -> str:
-    # Channels.
+def _create(db: Database, cfg: Config, request: dict[str, Any], sdrs: list[dict[str, Any]],
+            inputs: list[str], simultaneous: bool, title: str, auto: bool, max_signals: int,
+            low: float, high: float, center: float, sdr_hz: float, band: str,
+            signals: list[dict[str, Any]], free_bytes: int | None) -> str:
+    # Channels: the two inputs of one SDR (switched), or one SDR per antenna (simultaneous).
     aa = bool(request.get("aa"))
     channels = request.get("channels") or []
-    if len(channels) != 2:
+    n_ch = len(sdrs) if simultaneous else 2
+    if len(channels) != n_ch:
         raise CampaignError("Choisissez une antenne pour chacune des entrées A et B.")
     antenna_ids = [int(c["antenna_id"]) for c in channels]
     for aid in antenna_ids:
         if not db.query("SELECT 1 FROM antennas WHERE id = ? AND archived = 0", (aid,)):
             raise CampaignError("Antenne introuvable dans le catalogue.")
-    if aa and antenna_ids[0] != antenna_ids[1]:
-        raise CampaignError("Une campagne A/A utilise la même antenne sur les deux entrées.")
-    if not aa and antenna_ids[0] == antenna_ids[1]:
-        raise CampaignError("Choisissez deux antennes différentes (ou cochez « campagne A/A »).")
+    if aa and len(set(antenna_ids)) != 1:
+        raise CampaignError("Une campagne A/A utilise la même antenne sur toutes les voies.")
+    if not aa and len(set(antenna_ids)) != len(antenna_ids):
+        raise CampaignError("Choisissez des antennes différentes (ou cochez « campagne A/A »).")
     reference = int(request.get("reference", 0))
-    if reference not in (0, 1):
+    if not 0 <= reference < n_ch:
         raise CampaignError("Antenne de référence invalide.")
+    receiver = sdrs[0]
+    identities: list[str | None] = [d.get("identity") for d in sdrs]
 
     duration_s = float(request.get("duration_s", 0))
     if not 60 <= duration_s <= cfg.campaign.max_duration_days * 86_400:
@@ -182,55 +222,76 @@ def _create(db: Database, cfg: Config, receiver: dict[str, Any], request: dict[s
             f"Durée hors plage (1 minute à {cfg.campaign.max_duration_days:g} jours).")
     rate_hz = float(request.get("rate_hz") or cfg.qualification.switch_rate_hz)
 
-    # Hardware profile.
-    profile = active_profile(db, receiver.get("identity"), band)
+    # Hardware profile: bench of one SDR (switched) or A/A calibration of the set (simultaneous).
+    profile = active_profile(db, identities if simultaneous else receiver.get("identity"), band)
     if profile is not None and profile["accepted_ms"] is None:
         raise CampaignError("Le profil de qualification de ce SDR n'est pas accepté : "
                             "acceptez ses limites dans l'onglet Qualification.")
     if profile is not None and not request.get("accept_limits"):
         raise CampaignError("Confirmez que vous acceptez les limites du profil de qualification.")
-    blanking = float(profile["blanking_ms"]) if profile is not None \
-        else cfg.campaign.default_blanking_ms
+    if simultaneous:
+        blanking = 0.0
+    else:
+        blanking = float(profile["blanking_ms"]) if profile is not None \
+            else cfg.campaign.default_blanking_ms
     margins_json = json.loads(profile["margins_json"]) if profile is not None else {}
     correction = json.loads(profile["correction_json"]) if profile is not None else {}
 
     window_ms = window_ms_for(cfg, duration_s)
     period_s = min(cfg.campaign.period_s, window_ms / 1000 / 3)
+    volume = estimate_volume_bytes(len(signals) or max_signals + 1, n_ch, duration_s, period_s,
+                                   window_ms / 1000)
+    if free_bytes is not None:
+        need = max(int(volume * 1.2), volume + GIB)
+        if free_bytes < need:
+            raise CampaignError(
+                f"Espace disque insuffisant : la campagne demande {need / GIB:.1f} Go avec la "
+                f"marge, il reste {free_bytes / GIB:.1f} Go. Libérez de la place ou "
+                "raccourcissez la campagne.")
     start = now_ms()
     uuid = str(uuidlib.uuid4())
     device = receiver.get("device") or {}
+    models = [str((d.get("device") or {}).get("model", "SDR")) for d in sdrs]
+    sdr_label = (f"{n_ch} × {models[0]}" if len(set(models)) == 1 else ", ".join(models)) \
+        if simultaneous else f"{device.get('model', 'SDR')}"
     params = {
         "aa": aa, "auto": auto, "max_signals": max_signals,
         "rate_hz": rate_hz, "period_s": period_s, "window_ms": window_ms,
         "blanking_ms": blanking, "center_hz": center, "low_hz": low, "high_hz": high,
-        "sdr_hz": sdr_hz, "sdr": f"{device.get('model', 'SDR')}",
-        "identity": receiver.get("identity"), "inputs": inputs[:2],
+        "sdr_hz": sdr_hz, "sdr": sdr_label,
+        "reception": "simultaneous" if simultaneous else "switched",
+        "devices": [str((d.get("device") or {}).get("serial", "")) for d in sdrs],
+        "identities": identities, "heterogeneous": len(set(models)) > 1,
+        "identity": receiver.get("identity"), "inputs": inputs,
         "operator": cfg.station.callsign, "locator": cfg.station.locator, "timezone": "",
         "margins": margins_json.get("margins", {}),
         "correction": {"freqs_hz": correction.get("freqs_hz", []),
-                       "port_db": correction.get("port_db", [])},
+                       "port_db": correction.get("port_db", []),
+                       "channels_db": correction.get("channels_db")},
         "qualification": None if profile is None else {
-            "kind": "bench", "run": profile["run_uuid"], "date_ms": profile["ended_ms"],
+            "kind": profile["run_kind"], "run": profile["run_uuid"],
+            "date_ms": profile["ended_ms"],
             "blanking_ms": profile["blanking_ms"], "useful": profile["useful_fraction"],
             "verdicts": margins_json.get("verdicts", []),
             "aa_campaign": margins_json.get("aa_campaign")},
-        "volume_bytes": estimate_volume_bytes(len(signals) or max_signals + 1, 2, duration_s,
-                                              period_s, window_ms / 1000),
+        "volume_bytes": volume,
         "antennas": [],
     }
     if not title:
         names = [db.query("SELECT name FROM antennas WHERE id = ?", (a,))[0]["name"]
                  for a in antenna_ids]
-        title = f"A/A : {names[0]}" if aa else f"{names[0]} contre {names[1]}"
+        title = f"A/A : {names[0]}" if aa else (
+            f"{names[0]} contre {names[1]}" if n_ch == 2 else f"{n_ch} antennes : "
+            + ", ".join(names))
     with db.transaction() as conn:
         cur = conn.execute(
             "INSERT INTO campaigns (uuid, title, callsign, reception_mode, measure_mode, low_hz,"
             " high_hz, band, state, created_ms, start_ms, planned_end_ms, n_channels,"
             " reference_channel, profile_id, visibility, params_json) VALUES"
-            " (?, ?, ?, 'switched', ?, ?, ?, ?, 'running', ?, ?, ?, 2, ?, ?, ?, ?)",
-            (uuid, title, cfg.station.callsign, "auto" if auto else "fixed", low, high, band,
-             start, start,
-             start + int(duration_s * 1000), reference,
+            " (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?)",
+            (uuid, title, cfg.station.callsign, "simultaneous" if simultaneous else "switched",
+             "auto" if auto else "fixed", low, high, band, start, start,
+             start + int(duration_s * 1000), n_ch, reference,
              profile["id"] if profile is not None else None, request.get("visibility", "private"),
              json.dumps(params, ensure_ascii=False)))
         cid = int(cur.lastrowid or 0)
@@ -239,7 +300,8 @@ def _create(db: Database, cfg: Config, receiver: dict[str, Any], request: dict[s
             chain = current_chain(db, aid)
             chains.append(chain["id"] if chain else None)
             hw = conn.execute("SELECT id FROM hardware WHERE identity = ?",
-                              (receiver.get("identity"),)).fetchone()
+                              (identities[k] if simultaneous else receiver.get("identity"),)
+                              ).fetchone()
             conn.execute(
                 "INSERT INTO campaign_channels (campaign_id, idx, antenna_id, chain_id,"
                 " hardware_id,"
@@ -282,6 +344,17 @@ class Running:
     last_survey_ms: int | None = None
     last_ts: int | None = None
     corrections: dict[int, list[float]] = field(default_factory=dict)
+    reception: str = "switched"
+    devices: list[str] = field(default_factory=list)
+    # Last period reported by each channel: a window closes when every channel is past it.
+    channel_last: dict[int, int] = field(default_factory=dict)
+    # Wall time of each period start, per channel, until every channel has reported it.
+    walls: dict[int, dict[int, float]] = field(default_factory=dict)
+    align_ms: list[float] = field(default_factory=list)
+
+    @property
+    def simultaneous(self) -> bool:
+        return self.reception == "simultaneous"
 
 
 def load_running(db: Database) -> Running | None:
@@ -297,7 +370,8 @@ def load_running(db: Database) -> Running | None:
     run = Running(uuid=c["uuid"], id=int(c["id"]), planned_end_ms=int(c["planned_end_ms"]),
                   window_ms=int(params["window_ms"]), reference=int(c["reference_channel"]),
                   n_ch=int(c["n_channels"]), params=params, signals=signals,
-                  last_present_ms=int(c["start_ms"]), auto=c["measure_mode"] == "auto")
+                  last_present_ms=int(c["start_ms"]), auto=c["measure_mode"] == "auto",
+                  reception=c["reception_mode"], devices=list(params.get("devices") or []))
     last_ts = db.query("SELECT MAX(ts_ms) FROM measurements WHERE campaign_id = ?",
                        (run.id,))[0][0]
     run.last_ts = int(last_ts) if last_ts is not None else None
@@ -311,6 +385,15 @@ def load_running(db: Database) -> Running | None:
 def _set_corrections(run: Running) -> None:
     params, signals = run.params, run.signals
     corr = params.get("correction") or {}
+    if corr.get("channels_db"):
+        # Simultaneous mode: gain of each SDR against the reference, versus frequency.
+        for s in signals:
+            run.corrections[int(s["id"])] = [
+                _interp(corr["freqs_hz"], corr["channels_db"][k], s["freq_hz"])
+                if k < len(corr["channels_db"]) else 0.0 for k in range(run.n_ch)]
+        return
+    if run.simultaneous:
+        return  # not calibrated yet: no correction (the switched bench does not apply)
     for s in signals:
         port = _interp(corr.get("freqs_hz", []), corr.get("port_db", []), s["freq_hz"])
         # port = A - B on the same signal: B reads low by port, A is the scale of reference.
@@ -324,12 +407,22 @@ def period_s(run: Running, cfg: Config) -> float:
     return max(normal, cfg.campaign.calm_period_s) if run.calm else normal
 
 
-def engine_spec(run: Running, cfg: Config) -> dict[str, Any]:
+def engine_start_ms(run: Running) -> int:
+    """Start of the next measurement grid, the same for every SDR of the campaign."""
+    if run.last_ts is None:
+        return now_ms()
+    return max(now_ms(), run.last_ts + int(run.params["period_s"] * 1000))
+
+
+def engine_spec(run: Running, cfg: Config, channel: int = 0,
+                start_ms: int | None = None) -> dict[str, Any]:
     p = run.params
     period = period_s(run, cfg)
-    start = 0 if run.last_ts is None else run.last_ts + int(p["period_s"] * 1000)
+    start = engine_start_ms(run) if start_ms is None else start_ms
+    inputs = [p["inputs"][channel]] if run.simultaneous else p["inputs"]
     return {
-        "campaign": run.uuid, "inputs": p["inputs"], "rate_hz": p["rate_hz"],
+        "campaign": run.uuid, "inputs": inputs, "channel_base": channel if run.simultaneous else 0,
+        "rate_hz": p["rate_hz"],
         "blanking_ms": p["blanking_ms"], "fft_size": cfg.spectrum.fft_size,
         "period_s": period, "start_ms": start, "clip_threshold": cfg.spectrum.clip_threshold,
         "clip_alert_ratio": cfg.spectrum.clip_alert_ratio, "center_hz": p["center_hz"],
@@ -344,7 +437,28 @@ def survey_request(run: Running, cfg: Config) -> dict[str, Any]:
     return {"campaign": run.uuid, "sdr_hz": c["sdr_hz"], "low_hz": c["low_hz"],
             "high_hz": c["high_hz"], "seconds": cfg.campaign.survey_s,
             "fft_size": cfg.spectrum.fft_size, "detect_db": cfg.campaign.detect_db,
-            "class_width_hz": cfg.campaign.class_width_hz}
+            "class_width_hz": cfg.campaign.class_width_hz,
+            # Simultaneous mode: the first SDR surveys on its own input only.
+            "inputs": [c["inputs"][0]] if run.simultaneous else None}
+
+
+def load_test_spec(cfg: Config, device: dict[str, Any], test_id: str) -> dict[str, Any]:
+    """Measurement at full load on one SDR: most signals, spread over the band, shortest
+    period. Nothing is stored; only the processor time counts."""
+    center = float(device.get("center_hz") or cfg.receiver.center_frequency_hz)
+    usable = float(device.get("bandwidth_hz") or 0.0) * 0.8
+    n = cfg.campaign.max_signals
+    offsets = [usable * ((k + 0.5) / n - 0.5) for k in range(n)]
+    return {
+        "campaign": test_id, "inputs": [device.get("input") or ""], "channel_base": 0,
+        "rate_hz": 1.0, "blanking_ms": 0.0, "fft_size": cfg.spectrum.fft_size,
+        "period_s": 1.0, "start_ms": 0,  # one load sample per second
+        "clip_threshold": cfg.spectrum.clip_threshold,
+        "clip_alert_ratio": cfg.spectrum.clip_alert_ratio, "center_hz": center,
+        "sdr_hz": center, "display_points": cfg.spectrum.display_points,
+        "signals": [{"id": -1 - k, "offset_hz": off if abs(off) > 2000 else off + 4000,
+                     "width_hz": 2700.0, "class": "ssb"} for k, off in enumerate(offsets)],
+    }
 
 
 def apply_survey(db: Database, run: Running, result: dict[str, Any], ts: int) -> dict[str, Any]:
@@ -388,7 +502,9 @@ def apply_survey(db: Database, run: Running, result: dict[str, Any], ts: int) ->
 
 def store_measurements(db: Database, cfg: Config, run: Running, event: dict[str, Any]) -> None:
     ts = int(event["ts_ms"])
-    run.last_ts = ts
+    run.last_ts = max(run.last_ts or ts, ts)
+    base = int(event.get("channel_base", 0))
+    channels = [base] if run.simultaneous else list(range(run.n_ch))
     rows = []
     present = False
     for sid, ch, rssi, floor, quality, _n in event["values"]:
@@ -402,12 +518,50 @@ def store_measurements(db: Database, cfg: Config, run: Running, event: dict[str,
         conn.executemany(
             "INSERT INTO measurements (campaign_id, signal_id, channel_idx, ts_ms, rssi_dbfs,"
             " floor_dbfs, snr_db, quality) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
-    _activity(db, cfg, run, ts, present)
+    if not run.simultaneous or base == run.reference:
+        _activity(db, cfg, run, ts, present)
+    if run.simultaneous and event.get("wall_ms") is not None:
+        _alignment(db, cfg, run, ts, base, float(event["wall_ms"]))
+    for ch in channels:
+        run.channel_last[ch] = max(run.channel_last.get(ch, ts), ts)
     if run.window_start is None:
         run.window_start = ts - ts % run.window_ms
-    while ts >= run.window_start + run.window_ms:
+    # A window closes once every channel has reported a later period.
+    while all_reported(run) >= run.window_start + run.window_ms:
         aggregate_window(db, run, run.window_start)
         run.window_start += run.window_ms
+
+
+def all_reported(run: Running) -> int:
+    """Latest period every channel has reported (-1 while one is missing)."""
+    if len(run.channel_last) < run.n_ch:
+        return -1
+    return min(run.channel_last.values())
+
+
+def _alignment(db: Database, cfg: Config, run: Running, ts: int, channel: int,
+               wall: float) -> None:
+    """Spread of the wall times of the same period across the SDRs. Beyond the tolerance,
+    voices (SSB, AM/FM), whose envelope changes within milliseconds, are not paired."""
+    seen = run.walls.setdefault(ts, {})
+    seen[channel] = wall
+    if len(seen) < run.n_ch:
+        for old in [t for t in run.walls if t < ts - 20 * run.window_ms]:
+            del run.walls[old]
+        return
+    spread = max(seen.values()) - min(seen.values())
+    del run.walls[ts]
+    run.align_ms.append(round(spread, 2))
+    run.align_ms = run.align_ms[-2000:]
+    if spread > cfg.campaign.align_tolerance_ms:
+        voices = [s["id"] for s in run.signals if s["class"] in VOICE]
+        if voices:
+            marks = ",".join("?" * len(voices))
+            with db.transaction() as conn:
+                conn.execute(
+                    f"UPDATE measurements SET quality = quality | {Q_MISALIGNED}"
+                    f" WHERE campaign_id = ? AND ts_ms = ? AND signal_id IN ({marks})",
+                    (run.id, ts, *voices))
 
 
 def _activity(db: Database, cfg: Config, run: Running, ts: int, present: bool) -> None:
@@ -502,7 +656,8 @@ def aggregate_window(db: Database, run: Running, start: int) -> None:
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", pairs)
 
 
-def finish(db: Database, run: Running, state: str, end_ms: int) -> None:
+def finish(db: Database, run: Running, state: str, end_ms: int,
+           cfg: Config | None = None) -> None:
     """Close the campaign: last windows, activity, state; A/A margins into the profile."""
     if run.window_start is not None:
         while run.window_start < end_ms:
@@ -515,7 +670,10 @@ def finish(db: Database, run: Running, state: str, end_ms: int) -> None:
                      (state, end_ms, run.id))
     db.log_event("campaign_end", {"campaign": run.uuid, "state": state})
     if run.params.get("aa") and state == "done":
-        aa_margins(db, run)
+        if run.simultaneous:
+            calibrate_simultaneous(db, cfg, run, end_ms)
+        else:
+            aa_margins(db, run)
 
 
 def aa_margins(db: Database, run: Running) -> dict[str, float] | None:
@@ -553,3 +711,81 @@ def aa_margins(db: Database, run: Running) -> dict[str, float] | None:
                          (json.dumps(stored, ensure_ascii=False), profile_id))
     db.log_event("aa_margins", {"campaign": run.uuid, "margins": margins})
     return margins
+
+
+def calibrate_simultaneous(db: Database, cfg: Config | None, run: Running, end_ms: int
+                           ) -> dict[str, Any] | None:
+    """A/A campaign of the simultaneous mode = calibration of the set of SDRs.
+
+    The same antenna feeds every SDR through a splitter: the median difference of each SDR
+    against the reference, per signal, is its gain correction at that frequency (added to
+    the correction already applied during the campaign). What remains around these medians
+    is the error of the method: margin per class = 2 standard deviations of the window
+    medians. The result is a new hardware profile for this set of SDRs and this band.
+    """
+    rows = db.query(
+        "SELECT a.signal_id, s.freq_hz, s.class, a.channel_idx, a.dref_med FROM aggregates a"
+        " JOIN signals s ON s.id = a.signal_id WHERE a.campaign_id = ? AND a.channel_idx != ?"
+        " AND a.dref_med IS NOT NULL AND s.class != 'noise'", (run.id, run.reference))
+    per: dict[tuple[int, int], list[float]] = {}
+    info: dict[int, tuple[float, str]] = {}
+    for r in rows:
+        key = (int(r["signal_id"]), int(r["channel_idx"]))
+        per.setdefault(key, []).append(float(r["dref_med"]))
+        info[int(r["signal_id"])] = (float(r["freq_hz"]), str(r["class"]))
+    if not per:
+        db.log_event("error", {"calibration": run.uuid, "message": "aucune mesure exploitable"})
+        return None
+    sids = sorted(info, key=lambda k: info[k][0])
+    freqs = [info[k][0] for k in sids]
+    channels_db = [[0.0] * len(sids) for _ in range(run.n_ch)]
+    residuals: dict[str, list[float]] = {}
+    for (sid, ch), values in per.items():
+        med = float(np.median(values))
+        applied = run.corrections.get(sid, [0.0] * run.n_ch)
+        channels_db[ch][sids.index(sid)] = round(applied[ch] - applied[run.reference] - med, 3)
+        residuals.setdefault(info[sid][1], []).extend(v - med for v in values)
+    margins = {cls: round(max(0.05, 2 * float(np.std(v, ddof=1))), 2)
+               for cls, v in residuals.items() if len(v) >= 3}
+    if margins:
+        margins["all"] = max(margins.values())
+    align = np.asarray(run.align_ms) if run.align_ms else None
+    tol = cfg.campaign.align_tolerance_ms if cfg is not None else 5.0
+    align_p99 = float(np.percentile(align, 99)) if align is not None else None
+    labels = {"carrier": "Porteuses et CW", "digital": "Signaux numériques", "ssb": "SSB",
+              "am_fm": "AM et FM"}
+    verdicts = [{"class": cls, "label": labels.get(cls, cls),
+                 "state": "warn" if cls in VOICE and align_p99 is not None and align_p99 > tol
+                 else "ok", "rate_hz": None, "useful": 1.0, "margin_db": margins.get(cls)}
+                for cls in ("carrier", "digital", "ssb", "am_fm")]
+    c = db.query("SELECT * FROM campaigns WHERE id = ?", (run.id,))[0]
+    identities = json.dumps(run.params.get("identities") or [])
+    ts = now_ms()
+    validity = (cfg.qualification.validity_days if cfg is not None else 180) * 86_400_000
+    alignment = None if align is None else {
+        "p50": round(float(np.percentile(align, 50)), 2), "p99": round(align_p99 or 0.0, 2)}
+    with db.transaction() as conn:
+        cur = conn.execute(
+            "INSERT INTO qualification_runs (uuid, kind, reception_mode, band, center_hz,"
+            " sample_rate, hardware_json, started_ms, ended_ms, status, results_json,"
+            " verdicts_json, accepted_ms) VALUES (?, 'aa', 'simultaneous', ?, ?, 0, ?, ?, ?,"
+            " 'done', ?, ?, ?)",
+            (str(uuidlib.uuid4()), c["band"], run.params["center_hz"], identities,
+             c["start_ms"], end_ms,
+             json.dumps({"aa_campaign": run.uuid, "alignment_ms": alignment}),
+             json.dumps(verdicts, ensure_ascii=False), ts))
+        conn.execute(
+            "UPDATE hardware_profiles SET active = 0 WHERE identities_json = ? AND band = ?",
+            (identities, c["band"]))
+        conn.execute(
+            "INSERT INTO hardware_profiles (qualification_id, identities_json, band, gain_json,"
+            " switch_rate_hz, blanking_ms, useful_fraction, correction_json, margins_json,"
+            " created_ms, valid_until_ms, active)"
+            " VALUES (?, ?, ?, '{}', NULL, 0, 1, ?, ?, ?, ?, 1)",
+            (int(cur.lastrowid or 0), identities, c["band"],
+             json.dumps({"freqs_hz": freqs, "channels_db": channels_db, "alignment_ms": alignment}),
+             json.dumps({"margins": margins, "verdicts": verdicts, "aa_campaign": run.uuid},
+                        ensure_ascii=False), ts, ts + validity))
+    db.log_event("calibration", {"campaign": run.uuid, "margins": margins,
+                                 "alignment_ms": alignment})
+    return {"margins": margins, "channels_db": channels_db, "freqs_hz": freqs}

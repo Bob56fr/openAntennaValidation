@@ -31,7 +31,6 @@ from open_antenna_validation.hardware.base import (
 
 Floats = npt.NDArray[np.float64]
 
-_SERIAL = "SIM0001"
 _RATES = [62_500, 125_000, 250_000, 500_000, 1_000_000, 2_000_000]
 _STEPS = 40
 _ANTENNAS = ["A", "B"]
@@ -57,7 +56,10 @@ class SimulatedDriver(SdrDriver):
 
     def __init__(self, config: SimulatedConfig) -> None:
         self._config = config
-        self._rng = np.random.default_rng(config.seed)
+        self.realtime = config.realtime
+        # Each simulated SDR its own noise; the signals are the same "air" for all.
+        self._rng = np.random.default_rng(config.seed + sum(map(ord, config.serial)))
+        self._epoch = 0.0
         self._open = False
         self._frequency = 7.1e6
         self._rate = 250_000
@@ -76,10 +78,10 @@ class SimulatedDriver(SdrDriver):
         return Availability(available=True, library_version="simulé")
 
     def detect(self) -> list[DeviceInfo]:
-        return [DeviceInfo(driver=self.name, model="Simulateur", serial=_SERIAL)]
+        return [DeviceInfo(driver=self.name, model="Simulateur", serial=self._config.serial)]
 
     def open(self, serial: str | None = None) -> DeviceInfo:
-        if serial and serial != _SERIAL:
+        if serial and serial != self._config.serial:
             raise HardwareError(f"Appareil simulé {serial} introuvable.")
         self._open = True
         self._restart()
@@ -88,6 +90,9 @@ class SimulatedDriver(SdrDriver):
     def _restart(self) -> None:
         self._sample = 0
         self._started = time.monotonic()
+        # Air time = wall clock at the start + samples: several simulated SDRs opened at
+        # the same moment see the same fading, voices and FT8 slots at the same instant.
+        self._epoch = time.time() if self._config.realtime else 0.0
         self._switches = [(0, self.effective_antenna(self.detect()[0]))]
 
     def close(self) -> None:
@@ -214,7 +219,7 @@ class SimulatedDriver(SdrDriver):
         if not self._open:
             raise HardwareError("Appareil simulé non ouvert.")
         first = self._sample
-        t = (first + np.arange(n)) / self._rate
+        t = self._epoch + (first + np.arange(n)) / self._rate
         self._sample += n
         cfg = self._config
         on_b, glitch = self._antenna_track(first, n)
@@ -229,13 +234,16 @@ class SimulatedDriver(SdrDriver):
             wave = {"carrier": self._carrier, "ssb": self._ssb, "ft8": self._ft8}[s.kind](
                 s, off, t)
             air += 10 ** (s.dbfs / 20) * wave
-        air *= 10 ** ((fading_db + np.where(on_b, cfg.antenna_b_signal_db, 0.0)) / 20)
+        air *= 10 ** ((fading_db + cfg.signal_offset_db
+                       + np.where(on_b, cfg.antenna_b_signal_db, 0.0)) / 20)
 
-        noise_db = cfg.noise_dbfs + np.where(on_b, cfg.antenna_b_noise_db, 0.0)
+        noise_db = (cfg.noise_dbfs + cfg.noise_offset_db
+                    + np.where(on_b, cfg.antenna_b_noise_db, 0.0))
         noise_amp = 10 ** (noise_db / 20) / math.sqrt(2)
         air += noise_amp * (self._rng.standard_normal(n) + 1j * self._rng.standard_normal(n))
 
-        signal = 10 ** ((simulated_gain_db(self._gain_index) + glitch) / 20) * air
+        gain = simulated_gain_db(self._gain_index) + cfg.gain_error_db
+        signal = 10 ** ((gain + glitch) / 20) * air
         out: IQBlock = np.empty(n, dtype=np.complex64)
         # ADC clipping on each rail, as a real converter does.
         out.real = np.clip(signal.real, -1.0, 1.0)

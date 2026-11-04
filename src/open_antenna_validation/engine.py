@@ -14,6 +14,7 @@ a simulated receiver running faster than real time runs a campaign faster too.
 from __future__ import annotations
 
 import math
+import time
 from typing import Any
 
 import numpy as np
@@ -27,9 +28,13 @@ Floats = npt.NDArray[np.float64]
 Q_SATURATION = 1
 Q_LOST = 2
 Q_ABSENT = 4
-QUALITY_LABELS = {Q_SATURATION: "SATURATION", Q_LOST: "PERTE_FLUX", Q_ABSENT: "ABSENT"}
+Q_MISALIGNED = 8
+QUALITY_LABELS = {Q_SATURATION: "SATURATION", Q_LOST: "PERTE_FLUX", Q_ABSENT: "ABSENT",
+                  Q_MISALIGNED: "DÉSALIGNÉE"}
 MEDIAN_CLASSES = ("ssb", "am_fm")
 MIN_FFT = 256
+# One input per SDR (simultaneous mode): no switching, chunks of this length.
+CHUNK_S = 0.1
 
 
 def _pow2_below(n: int) -> int:
@@ -42,9 +47,19 @@ class CampaignRunner:
         self.spec = spec
         self.inputs: list[str] = spec["inputs"]
         self.rate = driver.sample_rate()
-        cycle_hz = float(spec["rate_hz"])
-        self.dwell = max(1, int(self.rate / (len(self.inputs) * cycle_hz)))
-        self.blank = min(self.dwell - MIN_FFT, int(spec["blanking_ms"] * self.rate / 1000))
+        # Simultaneous mode: this SDR measures one channel, numbered from channel_base.
+        self.channel_base = int(spec.get("channel_base", 0))
+        self.switching = len(self.inputs) > 1
+        if self.switching:
+            cycle_hz = float(spec["rate_hz"])
+            self.dwell = max(1, int(self.rate / (len(self.inputs) * cycle_hz)))
+            self.blank = min(self.dwell - MIN_FFT,
+                             int(spec["blanking_ms"] * self.rate / 1000))
+        else:
+            self.dwell = int(self.rate * CHUNK_S)
+            self.blank = 0
+            if self.inputs[0]:
+                driver.set_antenna(self.inputs[0])
         if self.blank < 0:
             raise ValueError("Cadence trop rapide pour la neutralisation après bascule.")
         self.fft = min(int(spec["fft_size"]), _pow2_below(self.dwell - self.blank))
@@ -52,8 +67,9 @@ class CampaignRunner:
             raise ValueError("Durée utile par entrée trop courte pour mesurer.")
         self.spectrum = Spectrum(self.fft, self.rate)
         self.period = int(spec["period_s"] * self.rate)
-        # Continuity after a restart (new signals, calm period): never before the last period.
-        self.start_ms = max(start_ms, int(spec.get("start_ms") or 0))
+        # The service gives the start of the measurement grid: the same for every SDR of a
+        # simultaneous campaign, and after the last period when the engine restarts.
+        self.start_ms = int(spec["start_ms"]) if spec.get("start_ms") else start_ms
         self.samples = 0
         self.next_emit = self.period
         self.clip_threshold = float(spec["clip_threshold"])
@@ -99,14 +115,23 @@ class CampaignRunner:
         self.spectra_n = [0] * n_ch
         self.saturated = [False] * n_ch
         self.dropped_at_start = self.driver.dropped_samples()
+        # Load of this worker over the period (test before launch) and wall time of the
+        # first sample of the period (alignment of the SDRs, real receivers only).
+        self.cpu_start = time.process_time()
+        self.busy_s = 0.0
+        self.period_wall_ms: float | None = None
 
     # --- one cycle -----------------------------------------------------------------
 
     def cycle(self) -> list[dict[str, Any]]:
         """Visit every input once; returns the events to send (measurement, spectra)."""
         for ch, name in enumerate(self.inputs):
-            self.driver.set_antenna(name)
+            if self.switching:
+                self.driver.set_antenna(name)
             chunk = self.driver.read_iq(self.dwell)
+            work_start = time.perf_counter()
+            if self.period_wall_ms is None and self.driver.realtime:
+                self.period_wall_ms = time.time() * 1000 - self.dwell * 1000 / self.rate
             self.samples += self.dwell
             usable = chunk[self.blank :]
             if clipping_ratio(usable, self.clip_threshold) >= self.clip_alert:
@@ -124,6 +149,7 @@ class CampaignRunner:
                 if len(nb):
                     fl = np.median(frames[:, nb], axis=1) * scale
                     self.floor[ch][k].extend(fl.tolist())
+            self.busy_s += time.perf_counter() - work_start
         if self.samples < self.next_emit:
             return []
         events = self._emit()
@@ -144,12 +170,17 @@ class CampaignRunner:
                 level = float(np.median(arr)) if s["class"] in MEDIAN_CLASSES else float(arr.mean())
                 floor = float(np.median(floors)) if floors else None
                 quality = (Q_SATURATION if self.saturated[ch] else 0) | (Q_LOST if lost else 0)
-                values.append([s["id"], ch, round(float(db(level)), 2),
+                values.append([s["id"], self.channel_base + ch, round(float(db(level)), 2),
                                None if floor is None else round(float(db(floor)), 2),
                                quality, len(powers)])
         events: list[dict[str, Any]] = [{
             "type": "measurement", "campaign": self.spec["campaign"], "ts_ms": ts,
             "period_ms": int(self.period * 1000 / self.rate), "values": values,
+            "channel_base": self.channel_base,
+            "wall_ms": None if self.period_wall_ms is None else round(self.period_wall_ms, 1),
+            "cpu_s": round(time.process_time() - self.cpu_start, 4),
+            "busy_s": round(self.busy_s, 4), "audio_s": self.period / self.rate,
+            "dropped": self.driver.dropped_samples(),
         }]
         group = max(1, self.fft // int(self.spec.get("display_points", 1024)))
         for ch, name in enumerate(self.inputs):
