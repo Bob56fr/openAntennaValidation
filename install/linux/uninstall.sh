@@ -2,7 +2,8 @@
 # Désinstallation d'openAntennaValidation.
 # Usage : sudo ./install/linux/uninstall.sh [--purge]
 #   --purge : supprime aussi les données (configuration, base, journaux) et l'utilisateur.
-# L'API SDRplay, librtlsdr et libairspyhf, partagées avec d'autres logiciels, sont conservées.
+# L'API SDRplay, librtlsdr et libairspyhf (/usr/local), partagées avec d'autres logiciels, sont
+# conservées, ainsi que la synchronisation NTP.
 set -euo pipefail
 
 PREFIX=/opt/open-antenna-validation
@@ -18,6 +19,8 @@ if [[ -f "$UNIT" ]]; then
   systemctl daemon-reload
 fi
 rm -rf "$PREFIX"
+# Pilote TNT du noyau écarté pour la RTL-SDR : rendu au système (effectif au redémarrage).
+rm -f /etc/modprobe.d/oav-rtlsdr-blacklist.conf
 rm -f /usr/share/applications/oav.desktop /usr/share/icons/hicolor/scalable/apps/oav.svg
 if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]]; then
   USER_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"

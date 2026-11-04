@@ -78,6 +78,9 @@ import sys, tomllib
 hw = tomllib.load(open(sys.argv[1], "rb")).get("hardware", {})
 main = hw.get("driver", "sdrplay")
 drivers = [main] + [o.get("driver") or main for o in hw.get("others", [])]
+# A library installed by an earlier run (--sdr) still belongs to the station.
+drivers += [d for d in ("rtlsdr", "airspyhf")
+            if str(hw.get(d, {}).get("library_path", "")).startswith("/")]
 print(",".join(dict.fromkeys(d for d in drivers if d != "simulated")) or "sdrplay")
 PY
 )"
@@ -186,6 +189,7 @@ if has_sdr rtlsdr; then
   step "4b. Bibliothèque librtlsdr (branche RTL-SDR Blog)"
   build_lib rtl-sdr-blog "$RTLSDR_GIT" -DDETACH_KERNEL_DRIVER=ON
   # Le pilote TNT du noyau prend la clé avant librtlsdr : on l'écarte.
+  install -d /etc/modprobe.d
   cat > /etc/modprobe.d/oav-rtlsdr-blacklist.conf <<EOF
 # openAntennaValidation : la RTL-SDR sert de récepteur, pas de clé TNT.
 blacklist dvb_usb_rtl28xxu
@@ -209,6 +213,23 @@ if has_sdr rtlsdr || has_sdr airspyhf; then
   udevadm control --reload-rules && udevadm trigger
   echo "Débranchez et rebranchez les SDR USB pour appliquer les règles udev."
 fi
+
+step "4d. Horloge"
+# Les créneaux FT8/WSPR et l'alignement des SDR demandent une horloge synchronisée.
+if systemctl is-active --quiet chrony || systemctl is-active --quiet ntpsec     || systemctl is-active --quiet ntp; then
+  echo "OK : synchronisation assurée par un serveur NTP local"
+else
+  if ! systemctl list-unit-files systemd-timesyncd.service --no-legend 2>/dev/null | grep -q timesyncd; then
+    apt-get install -y systemd-timesyncd
+  fi
+  # timedatectl passe par D-Bus, absent des systèmes minimaux : systemd directement sinon.
+  if timedatectl set-ntp true 2>/dev/null || systemctl enable --now systemd-timesyncd.service; then
+    echo "OK : synchronisation NTP activée (systemd-timesyncd)"
+  else
+    echo "ATTENTION : synchronisation NTP non activée : installez chrony ou systemd-timesyncd."
+  fi
+fi
+[[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" == yes ]]   || echo "ATTENTION : horloge pas encore synchronisée (accès Internet ? pare-feu UDP 123 ?)"
 
 step "5. Environnement Python"
 id -u "$SERVICE_USER" >/dev/null 2>&1 || \
@@ -250,8 +271,14 @@ path = default_home() / CONFIG_FILENAME
 config = load_config(path)
 config.web.port = int(sys.argv[1])
 config.hardware.sdrplay.library_path = ""
-config.hardware.rtlsdr.library_path = sys.argv[2]
-config.hardware.airspyhf.library_path = sys.argv[3]
+# Paths of the libraries built here; a Windows path (imported station) is cleared, another
+# path is kept.
+for section, built in ((config.hardware.rtlsdr, sys.argv[2]),
+                       (config.hardware.airspyhf, sys.argv[3])):
+    if built:
+        section.library_path = built
+    elif not section.library_path.startswith("/"):
+        section.library_path = ""
 save_config(config, path)
 PY
 
