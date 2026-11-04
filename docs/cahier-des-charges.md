@@ -692,6 +692,16 @@ Le plugin reçoit les agrégats de plusieurs stations et les présente au public
 - **État des stations** : dernier envoi, campagne en cours, état.
 - (Bonus) **Synthèse multi-campagnes** : écart médian entre deux types d'antennes sur une bande, toutes campagnes confondues.
 
+### Campagne de démonstration
+
+Tant qu'aucune vraie campagne n'est publiée, le site doit montrer à quoi ressemblent les résultats :
+
+- Le plugin embarque une ou plusieurs **campagnes fictives**, construites comme les maquettes de P0 : 40 m sur 5 jours, avec bascule NVIS de jour et DX de nuit, à 2 et à 6 antennes. Elles passent par le même format de données et les mêmes pages qu'une vraie campagne.
+- Elles sont **marquées partout comme exemples**, dans la liste, sur la page de campagne et dans les filtres : bandeau « Campagne de démonstration, données simulées », opérateur fictif, aucune ressemblance avec un indicatif réel.
+- Elles sont affichées automatiquement quand aucune vraie campagne n'est visible, et **disparaissent dès la première vraie campagne publiée**. L'administrateur peut aussi les afficher en permanence (page d'aide) ou les désactiver.
+- Elles n'entrent jamais dans les statistiques, les compteurs ni la synthèse multi-campagnes.
+- La page locale de la station propose la même démonstration tant qu'elle n'a aucune campagne enregistrée.
+
 ### Back-office
 
 - Liste des campagnes : masquer, supprimer, renommer, annoter, changer la visibilité.
