@@ -754,6 +754,7 @@ Un seul code source, trois procédures : Windows 10/11 64 bits, Debian 12 ou plu
 ### Exigences non fonctionnelles
 
 - Fonctionnement continu pendant un mois, sans fuite mémoire ; redémarrage automatique sur erreur ; reprise de la campagne.
+- **Consultation sans matériel** : le service et la page locale démarrent et fonctionnent sans aucun SDR branché. Campagnes, résultats, qualifications, installation et réglages restent consultables ; seules les commandes du récepteur sont désactivées. L'absence de SDR est un état normal (« SDR non branché »), pas une erreur : la détection est relancée à intervalle croissant (5 s à 1 min) et seul le changement d'état est journalisé. Une campagne en cours passe en INTERROMPUE et reprend dès que le SDR revient.
 - Aucune perte de données en cas de coupure de courant (SQLite WAL, écritures transactionnelles).
 - Horloge synchronisée (NTP) requise : la station vérifie son décalage et le signale (indispensable pour les créneaux FT8/WSPR).
 - Charge CPU compatible avec un Raspberry Pi 4 en mode commuté, et avec un Pi 5 en mode simultané à 2 SDR avec décodage. Au-delà, c'est le test de charge qui décide ; le traitement de chaque voie doit pouvoir tourner sur un cœur distinct (un processus par SDR).

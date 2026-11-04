@@ -40,3 +40,7 @@ Le plan de P1 prévoyait le catalogue des câbles avec la configuration. Il est 
 ## D9 — Campagne de démonstration (2026-11-04, demande de l'utilisateur)
 
 Le site WordPress et la page locale montrent une campagne fictive, construite comme les maquettes de P0, tant qu'aucune vraie campagne n'existe (cahier des charges, section 13). Elle est marquée partout comme exemple et n'entre dans aucune statistique.
+
+## D10 — Consultation sans matériel (2026-11-04, demande de l'utilisateur)
+
+Le service et la page locale fonctionnent sans SDR branché (cahier des charges, section 16). L'acquisition vérifie la présence du SDR avant de l'ouvrir ; s'il manque, l'état devient « absent » (et non « erreur »), la détection est relancée de 5 s en doublant jusqu'à 1 min, et le journal ne garde que les changements d'état. Les commandes du récepteur répondent 400 tant qu'il n'est pas en marche ; tout le reste de l'API et des pages reste servi.

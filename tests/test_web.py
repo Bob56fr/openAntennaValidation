@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from open_antenna_validation.acquisition import wait_for
+from open_antenna_validation.config import HardwareConfig
+from open_antenna_validation.hardware import SdrDriver, create_driver
 from open_antenna_validation.service import Station
 from open_antenna_validation.web import app as web_app
 from open_antenna_validation.web import create_app
@@ -90,3 +93,28 @@ def test_static_assets_served(client: TestClient) -> None:
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/static/style.css").status_code == 200
     assert client.get("/login").status_code == 200
+
+
+def test_pages_and_api_work_without_sdr(
+    station_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(web_app, "FAILED_LOGIN_DELAY_S", 0.0)
+
+    def unplugged(config: HardwareConfig) -> SdrDriver:
+        driver = create_driver(config)
+        driver.detect = lambda: []  # type: ignore[method-assign]
+        return driver
+
+    s = Station.from_home(station_home, inline=True, driver_factory=unplugged)
+    s.startup()
+    try:
+        assert wait_for(lambda: s.receiver.get("state") == "absent", 5)
+        with TestClient(create_app(s, run_lifecycle=False)) as c:
+            login(c)
+            assert c.get("/").status_code == 200
+            assert c.get("/api/status").json()["hardware"]["state"] == "absent"
+            assert c.get("/api/bands").status_code == 200
+            assert c.post("/api/hardware/antenna", json={"antenna": "B"}).status_code == 400
+    finally:
+        s.shutdown()
+        s.db.close()

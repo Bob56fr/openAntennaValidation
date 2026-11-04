@@ -70,6 +70,14 @@ def run_acquisition(
             events.put({"type": "error", "fatal": True, "message": availability.message,
                         "help_url": availability.help_url})
             return
+        found = driver.detect()
+        if not found or (hardware.serial and all(d.serial != hardware.serial for d in found)):
+            # Not an error: the station keeps serving its data and retries later.
+            wanted = f" n° {hardware.serial}" if hardware.serial else ""
+            events.put({"type": "error", "fatal": True, "absent": True, "help_url": None,
+                        "message": f"Aucun SDR{wanted} branché."})
+            driver.shutdown()
+            return
         driver.set_sample_rate(hardware.sample_rate)
         device = driver.open(hardware.serial or None)
         driver.set_ppm(hardware.ppm)

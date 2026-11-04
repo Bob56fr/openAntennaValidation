@@ -31,7 +31,9 @@ log = logging.getLogger(__name__)
 TOPIC_SPECTRUM = "spectrum"
 TOPIC_STATUS = "status"
 HF_RANGE_HZ = (1_000_000.0, 30_000_000.0)
+# Retry after a failure or while no SDR is plugged in: 5 s, doubled up to 1 min.
 RESTART_DELAY_S = 5.0
+RESTART_MAX_S = 60.0
 
 
 class Station:
@@ -56,6 +58,7 @@ class Station:
         self._acq: Acquisition | None = None
         self._running = False
         self._restart: threading.Timer | None = None
+        self._retry_s = RESTART_DELAY_S
         # Last known state of the receiver, as reported by the worker.
         self.receiver: dict[str, Any] = {"state": "stopped"}
         self.last_spectrum: Event | None = None
@@ -113,9 +116,10 @@ class Station:
     def _schedule_restart(self) -> None:
         if not self._running:
             return
-        self._restart = threading.Timer(RESTART_DELAY_S, self._restart_now)
+        self._restart = threading.Timer(self._retry_s, self._restart_now)
         self._restart.daemon = True
         self._restart.start()
+        self._retry_s = min(RESTART_MAX_S, self._retry_s * 2)
 
     def _restart_now(self) -> None:
         if not self._running:
@@ -139,6 +143,7 @@ class Station:
             self.receiver["clip_alert"] = event["clip_alert"]
             self.hub.publish(TOPIC_SPECTRUM, event)
         elif kind == "opened":
+            self._retry_s = RESTART_DELAY_S
             device = DeviceInfo(**event["device"])
             self.identity = record_hardware(self.db, device, event["antenna"], event["gain_mode"])
             self.receiver = {"state": "running", **{k: v for k, v in event.items() if k != "type"},
@@ -156,10 +161,16 @@ class Station:
             self.db.log_event("gain_change", {"gain_index": event["gain_index"]})
             self._publish_status()
         elif kind == "error":
-            self.receiver = {**self.receiver, "state": "error", "error": event["message"],
+            state = "absent" if event.get("absent") else "error"
+            changed = (self.receiver.get("state"), self.receiver.get("error")) != (
+                state, event["message"])
+            self.receiver = {**self.receiver, "state": state, "error": event["message"],
                              "help_url": event.get("help_url")}
-            self.db.log_event("error", {"message": event["message"]})
-            log.error("Acquisition : %s", event["message"])
+            # Retries repeat the same message: only state changes go to the journal.
+            if changed:
+                self.db.log_event("sdr_absent" if state == "absent" else "error",
+                                  {"message": event["message"]})
+                log.warning("Acquisition : %s", event["message"])
             self._publish_status()
             if event.get("fatal"):
                 self._schedule_restart()

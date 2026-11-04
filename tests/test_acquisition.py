@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -103,3 +105,33 @@ def test_station_records_identity_and_switch(station: Station) -> None:
         station.set_frequency(145e6)
     station.set_frequency(6.66e6)
     assert wait_for(lambda: (station.last_spectrum or {}).get("center_hz") == 6.66e6, 5)
+
+
+def test_station_without_sdr_stays_usable_and_retries_quietly(
+    station_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from open_antenna_validation import service
+
+    monkeypatch.setattr(service, "RESTART_DELAY_S", 0.05)
+    monkeypatch.setattr(service, "RESTART_MAX_S", 0.1)
+
+    def unplugged(config: HardwareConfig) -> SdrDriver:
+        driver = create_driver(config)
+        driver.detect = lambda: []  # type: ignore[method-assign]
+        return driver
+
+    s = Station.from_home(station_home, inline=True, driver_factory=unplugged)
+    try:
+        s.startup()
+        assert wait_for(lambda: s.receiver.get("state") == "absent", 5)
+        time.sleep(0.6)  # several retries
+        report = s.hardware_report()
+        assert report["state"] == "absent"
+        assert report["error"] == "Aucun SDR branché."
+        rows = s.db.query("SELECT COUNT(*) FROM events WHERE type = 'sdr_absent'")
+        assert rows[0][0] == 1  # one journal line, not one per retry
+        with pytest.raises(HardwareError):
+            s.set_antenna("B")
+    finally:
+        s.shutdown()
+        s.db.close()

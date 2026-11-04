@@ -9,7 +9,8 @@ const NF3 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 3, maximumFr
 const f1 = (v) => (v == null || Number.isNaN(v) ? "—" : NF1.format(v).replace("-", "−"));
 const mhz = (hz) => NF3.format(hz / 1e6);
 const ANTENNA_SLOT = { A: 1, B: 2, C: 3, "": 1 };
-const STATE = { stopped: ["Arrêté", ""], starting: ["Démarrage", "warn"], running: ["En marche", "ok"], error: ["Erreur", "bad"] };
+const STATE = { stopped: ["Arrêté", ""], starting: ["Démarrage", "warn"], running: ["En marche", "ok"],
+  absent: ["SDR non branché", "warn"], error: ["Erreur", "bad"] };
 
 let hw = null;
 let bands = [];
@@ -26,8 +27,9 @@ async function api(path, body) {
   return data;
 }
 
-function showError(message, helpUrl) {
+function showError(message, helpUrl, level = "error") {
   const el = $("error");
+  el.className = `banner ${level}`;
   el.hidden = !message;
   el.textContent = message || "";
   if (message && helpUrl) {
@@ -52,7 +54,16 @@ function renderStatus(report) {
   if (report.sample_rate) parts.push(`<span>${NF1.format(report.sample_rate / 1000)} kS/s · bande utile ${Math.round(report.bandwidth_hz / 1000)} kHz</span>`);
   if (report.identity) parts.push(`<span class="mono" style="font-size:12.5px">${report.identity}</span>`);
   $("meta").innerHTML = parts.join("");
-  showError(report.state === "error" ? report.error : "", report.help_url);
+  if (report.state === "absent") {
+    showError(`${report.error} Les données de la station restent consultables ; le SDR sera détecté automatiquement dès qu'il sera branché.`, null, "warn");
+  } else {
+    showError(report.state === "error" ? report.error : "", report.help_url);
+  }
+  const live = report.state === "running";
+  $("spec-empty").hidden = live;
+  $("spectrum").hidden = !live;
+  $("spec-key").hidden = !live;
+  $("tiles").hidden = !live;
   $("identity-changed").hidden = !report.identity_changed;
 
   // Entrées
@@ -67,6 +78,8 @@ function renderStatus(report) {
   if (report.gain_index != null) gain.value = String(report.gain_index);
   // Fréquence
   if (document.activeElement !== $("freq") && report.center_hz) $("freq").value = (report.center_hz / 1000).toFixed(1);
+  // Sans récepteur, les commandes n'ont rien à piloter.
+  document.querySelectorAll("#antenna-seg button, #gain, #band, #freq-form button").forEach((el) => { el.disabled = !live; });
   renderBandNote();
 }
 
