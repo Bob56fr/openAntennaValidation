@@ -19,6 +19,12 @@ class SettingsBody(BaseModel):
     token: str = Field(default="", max_length=200)
 
 
+class TestBody(BaseModel):
+    # What the form holds; empty: the saved values.
+    url: str = Field(default="", max_length=300)
+    token: str = Field(default="", max_length=200)
+
+
 class VisibilityBody(BaseModel):
     visibility: Literal["private", "public", "unlisted"]
 
@@ -49,9 +55,13 @@ def build_router(station: Station) -> APIRouter:
         return report()
 
     @router.post("/wordpress/test")
-    def test() -> dict[str, Any]:
+    def test(body: TestBody | None = None) -> dict[str, Any]:
+        body = body or TestBody()
+        if body.url.strip() and not body.url.strip().startswith(("http://", "https://")):
+            raise HTTPException(status_code=400,
+                                detail="Adresse du site invalide (http:// ou https://).")
         try:
-            return {"limits": pub.fetch_limits()}
+            return {"limits": pub.test(body.url, body.token)}
         except PublishError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

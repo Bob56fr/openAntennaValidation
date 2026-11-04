@@ -172,6 +172,13 @@ def test_settings_api(client: TestClient, fake: FakeWordPress) -> None:  # noqa:
     assert station.config.wordpress.url == fake.url
     test = client.post("/api/wordpress/test").json()
     assert test["limits"]["operator"] == "Opérateur d'essai"
+    # The form's values, before saving them.
+    client.put("/api/wordpress", json={"enabled": False, "url": "", "token": ""})
+    r = client.post("/api/wordpress/test", json={"url": fake.url, "token": TOKEN})
+    assert r.status_code == 200, r.text
+    r = client.post("/api/wordpress/test", json={"url": fake.url, "token": "mauvais"})
+    assert r.status_code == 400 and "Jeton refusé" in r.json()["detail"]
+    client.put("/api/wordpress", json={"enabled": True, "url": fake.url, "token": ""})
     est = client.get("/api/wordpress/estimate", params={
         "duration_s": 86_400, "n_signals": 8, "n_channels": 2, "window_s": 60}).json()
     assert est["window_ms"] == 60_000 and est["limit_bytes"] == 0

@@ -249,6 +249,13 @@ class Publisher:
                 self._retry_s = FIRST_RETRY_S
                 self._next = now + wp.interval_s
 
+    def test(self, url: str, token: str) -> dict[str, Any]:
+        """Limits of a site not saved yet (link test from the settings form)."""
+        wp = self._config.wordpress
+        client = WordPressClient(url.strip().rstrip("/") or wp.url, token.strip() or wp.token,
+                                 wp.timeout_s)
+        return client.post("limits", {"schema": SCHEMA, "station_id": self._config.station.id})
+
     def fetch_limits(self) -> dict[str, Any]:
         answer = self.client().post("limits", {"schema": SCHEMA,
                                                "station_id": self._config.station.id})
