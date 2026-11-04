@@ -26,7 +26,12 @@ from open_antenna_validation.export import KINDS, export_csv
 from open_antenna_validation.export import filename as export_filename
 from open_antenna_validation.hardware import HardwareError
 from open_antenna_validation.service import TOPIC_SPECTRUM, TOPIC_STATUS, Station
-from open_antenna_validation.web import campaign_routes, installation_routes, qualification_routes
+from open_antenna_validation.web import (
+    campaign_routes,
+    installation_routes,
+    qualification_routes,
+    wordpress_routes,
+)
 from open_antenna_validation.web.auth import (
     SESSION_KEY,
     is_authenticated,
@@ -191,7 +196,11 @@ def create_app(station: Station, *, run_lifecycle: bool = True) -> FastAPI:
 
     @app.get("/api/campaigns", dependencies=[Depends(require_auth)])
     def campaigns() -> list[dict[str, Any]]:
-        return list_campaigns(station.db, show_demo=station.config.demo.enabled)
+        items = list_campaigns(station.db, show_demo=station.config.demo.enabled)
+        states = station.publisher.campaign_states()
+        for c in items:
+            c["publication"] = states.get(c["uuid"])
+        return items
 
     @app.get("/api/campaigns/{uuid}/export", dependencies=[Depends(require_auth)])
     def export(uuid: str, kind: str = "aggregates", dialect: str = "std") -> Response:
@@ -238,5 +247,6 @@ def create_app(station: Station, *, run_lifecycle: bool = True) -> FastAPI:
     app.include_router(qualification_routes.build_router(station))
     app.include_router(installation_routes.build_router(station))
     app.include_router(campaign_routes.build_router(station))
+    app.include_router(wordpress_routes.build_router(station))
     app.mount("/static", StaticFiles(directory=root), name="static")
     return app

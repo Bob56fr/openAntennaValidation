@@ -38,6 +38,8 @@ py -3.12 -m venv .venv
 
 Les trois contrôles (`pytest`, `ruff check`, `mypy`) doivent passer avant chaque fin de phase.
 
+Plugin WordPress : `wordpress/open-antenna-validation/` (PHP) ; `python wordpress/build.py --zip` copie les fichiers partagés de `web/` et produit le zip. WordPress de test sur la Debian (accès SSH, groupe docker, sans sudo) : copier `wordpress/dev` et le plugin construit dans `~/oav/wordpress`, puis `dev/dev-up.sh` (port 8082 ; le 8081 est celui d'openAISReceiver). Tests du vrai plugin : `OAV_WP_URL=http://<debian>:8082 OAV_WP_TOKEN1=… OAV_WP_TOKEN2=… pytest -m wordpress`. Syntaxe PHP : `docker run --rm -v …:/p wordpress:6.6-php8.2-apache php -l /p/…`.
+
 Pièges Windows : PowerShell 5.1 écrit en UTF-8 avec BOM (`Set-Content`, `Out-File`) ; ne pas l'utiliser pour modifier `pyproject.toml` ni les fichiers TOML. Un processus enfant `multiprocessing` doit abandonner ses files si le parent disparaît (D6).
 
 ## Avancement
@@ -51,7 +53,7 @@ Pièges Windows : PowerShell 5.1 écrit en UTF-8 avec BOM (`Set-Content`, `Out-F
 | P4 Bande automatique | Livré avec le simulateur (D15), en attente de test sur le RSP2 Pro |
 | P5 Mode simultané | Livré avec le simulateur (D16), en attente de test sur plusieurs SDR réels |
 | P6 Résultats locaux | Livré (D11, D17) : bootstrap par blocs, Holm, qualité des données, export CSV ; pistes FT8 en P10 |
-| P7 WordPress | À faire |
+| P7 WordPress | Livré (D18) : vérifié sur le WordPress de test (Debian, port 8082) ; à essayer sur OVH |
 | P8 RTL-SDR V4 et Airspy HF+ | À faire |
 | P9 Installeurs | Linux : première version (`install/linux`) ; Windows : à faire |
 | P10 Modes numériques | À faire |

@@ -45,8 +45,10 @@ def list_campaigns(db: Database, *, show_demo: bool = True) -> list[dict[str, An
             "high_hz": r["high_hz"], "state": r["state"], "reception_mode": r["reception_mode"],
             "measure_mode": r["measure_mode"], "start_ms": r["start_ms"], "end_ms": r["end_ms"],
             "n_channels": r["n_channels"], "demo": bool(params.get("demo")),
+            "visibility": r["visibility"],
             "sdr": params.get("sdr", ""), "operator": params.get("operator", r["callsign"]),
             "antenna_types": [ANTENNA_TYPES.get(t, t) for t in (r["types"] or "").split(",") if t],
+            "type_codes": sorted({t for t in (r["types"] or "").split(",") if t}),
         })
     real = [c for c in items if not c["demo"]]
     if real or not show_demo:
@@ -71,6 +73,35 @@ def _chain_losses(db: Database, chain_id: int | None, band: str, freq_hz: float)
 
 
 def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
+    meta = campaign_meta(db, uuid)
+    cid = int(db.query("SELECT id FROM campaigns WHERE uuid = ?", (uuid,))[0]["id"])
+    n_ch = int(meta["campaign"]["n_channels"])
+    windows = db.query(
+        "SELECT MIN(window_start_ms) AS first, MAX(window_start_ms) AS last, MAX(window_ms) AS step"
+        " FROM aggregates WHERE campaign_id = ?", (cid,),
+    )[0]
+    first, step = windows["first"], windows["step"]
+    count = 0 if first is None else (windows["last"] - first) // step + 1
+    signals = []
+    for sig in meta["signals"]:
+        rssi: list[list[float | None]] = [[None] * count for _ in range(n_ch)]
+        floor: list[list[float | None]] = [[None] * count for _ in range(n_ch)]
+        for a in db.query(
+            "SELECT channel_idx, window_start_ms, rssi_med, floor_med FROM aggregates"
+            " WHERE campaign_id = ? AND signal_id = ?", (cid, sig["key"]),
+        ):
+            i = (a["window_start_ms"] - first) // step
+            rssi[a["channel_idx"]][i] = a["rssi_med"]
+            floor[a["channel_idx"]][i] = a["floor_med"]
+        signals.append({**sig, "rssi": rssi, "floor": floor})
+    quality = meta.pop("quality")
+    return {**meta, "windows": {"start_ms": first, "step_ms": step, "count": count},
+            "signals": signals, "quality": quality}
+
+
+def campaign_meta(db: Database, uuid: str, *, locator_chars: int = 6) -> dict[str, Any]:
+    """Everything about a campaign but the window values: the part of the result set that
+    is also published as is, and changes only now and then (segments, activity, quality)."""
     rows = db.query("SELECT * FROM campaigns WHERE uuid = ?", (uuid,))
     if not rows:
         raise CampaignNotFound(uuid)
@@ -89,7 +120,7 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
         channels.append({
             "idx": ch["idx"], "letter": letter, "color_slot": ch["color_slot"],
             "name": ch["name"], "short": shorts.get(letter, ch["name"]),
-            "type": ANTENNA_TYPES.get(ch["type"], ch["type"]),
+            "type": ANTENNA_TYPES.get(ch["type"], ch["type"]), "type_code": ch["type"],
             "height": ch["height_note"] or (f"{ch['height_m']} m" if ch["height_m"] else ""),
             "polarization": POLARIZATIONS.get(ch["polarization"], ch["polarization"]),
             "orientation": ch["orientation_note"],
@@ -108,30 +139,13 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
                        for x in chains],
         })
 
-    windows = db.query(
-        "SELECT MIN(window_start_ms) AS first, MAX(window_start_ms) AS last, MAX(window_ms) AS step"
-        " FROM aggregates WHERE campaign_id = ?", (cid,),
-    )[0]
-    first, step = windows["first"], windows["step"]
-    count = 0 if first is None else (windows["last"] - first) // step + 1
     n_ch = int(c["n_channels"])
-
-    signals = []
-    for sig in db.query(
-        "SELECT id, freq_hz, class, width_hz FROM signals WHERE campaign_id = ? ORDER BY freq_hz",
-        (cid,),
-    ):
-        rssi: list[list[float | None]] = [[None] * count for _ in range(n_ch)]
-        floor: list[list[float | None]] = [[None] * count for _ in range(n_ch)]
-        for a in db.query(
-            "SELECT channel_idx, window_start_ms, rssi_med, floor_med FROM aggregates"
-            " WHERE campaign_id = ? AND signal_id = ?", (cid, sig["id"]),
-        ):
-            i = (a["window_start_ms"] - first) // step
-            rssi[a["channel_idx"]][i] = a["rssi_med"]
-            floor[a["channel_idx"]][i] = a["floor_med"]
-        signals.append({"freq_hz": sig["freq_hz"], "class": sig["class"],
-                        "width_hz": sig["width_hz"], "rssi": rssi, "floor": floor})
+    windows = db.query("SELECT COUNT(DISTINCT window_start_ms) FROM aggregates"
+                       " WHERE campaign_id = ?", (cid,))[0][0]
+    signals = [{"key": int(s["id"]), "freq_hz": s["freq_hz"], "class": s["class"],
+                "width_hz": s["width_hz"]}
+               for s in db.query("SELECT id, freq_hz, class, width_hz FROM signals"
+                                 " WHERE campaign_id = ? ORDER BY freq_hz", (cid,))]
 
     activity = [dict(r) for r in db.query(
         "SELECT state, start_ms, end_ms, reason FROM activity WHERE campaign_id = ?"
@@ -146,7 +160,8 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
             "planned_end_ms": c["planned_end_ms"], "aa": bool(params.get("aa")),
             "n_channels": n_ch, "reference_channel": c["reference_channel"],
             "demo": bool(params.get("demo")), "sdr": params.get("sdr", ""),
-            "operator": params.get("operator", c["callsign"]), "locator": params.get("locator", ""),
+            "operator": params.get("operator", c["callsign"]),
+            "locator": str(params.get("locator", ""))[:locator_chars],
             "timezone": params.get("timezone", ""),
             "margins": params.get("margins", {}), "qualification": params.get("qualification"),
             "load_test": params.get("load_test"),
@@ -154,10 +169,9 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
         },
         "channels": channels,
         "segments": segments,
-        "windows": {"start_ms": first, "step_ms": step, "count": count},
         "signals": signals,
         "activity": activity,
-        "quality": _quality(db, cid, n_ch, activity, params, count, len(signals)),
+        "quality": _quality(db, cid, n_ch, activity, params, windows, len(signals)),
     }
 
 

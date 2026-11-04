@@ -1,0 +1,22 @@
+/* Pages publiques du plugin : compléments au système de design (assets/shared/oav-design.css,
+   généré depuis la page locale et cantonné à .oav-root). */
+
+/* Le thème du site ne doit pas déborder dans les pages : fond, police, boutons. */
+.oav-root { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; padding-block: 8px 24px; border-radius: 8px; }
+.oav-root * { box-sizing: border-box; }
+.oav-root button, .oav-root select, .oav-root input { font-family: inherit; text-transform: none; letter-spacing: normal; box-shadow: none; }
+.oav-root a { text-decoration: none; }
+.oav-root h1, .oav-root h2, .oav-root h3, .oav-root h4 { margin: 0; letter-spacing: normal; text-transform: none; font-family: var(--font-body); }
+.oav-root .head h1, .oav-root .sec-head h2, .oav-root .camp .b { font-family: var(--font-cond); }
+.oav-root table { margin: 0; border: 0; }
+.oav-root .wrap { max-width: 1240px; }
+
+/* Les barres collantes de la page locale ne le sont pas dans une page de site (en-têtes fixes). */
+.oav-root .rcontrols { position: static; }
+
+.oav-back { padding-block: 8px 0; }
+.oav-filters { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; padding-block: 12px; }
+.oav-filters select, .oav-filters input[type="date"] { min-width: 120px; }
+.oav-check { display: flex; align-items: center; gap: 8px; font-size: 14px; padding-bottom: 6px; cursor: pointer; }
+.oav-check input { width: 17px; height: 17px; accent-color: var(--ink); }
+.oav-root .clist { margin-top: 8px; }

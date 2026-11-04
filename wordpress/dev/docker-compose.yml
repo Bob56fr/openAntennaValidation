@@ -1,0 +1,58 @@
+# WordPress de test du plugin openAntennaValidation (PHP 8.2 + MariaDB, proche d'un
+# hébergement mutualisé OVH). Le plugin est monté depuis le dépôt (construit par
+# wordpress/build.py) : une modification est visible aussitôt.
+# Lancement : ./dev-up.sh ; arrêt : ./dev-down.sh (--purge pour tout effacer).
+name: oav-wp
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: wordpress
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 30
+
+  wordpress:
+    image: wordpress:6.6-php8.2-apache
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${OAV_WP_PORT:-8082}:80"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DEBUG: "1"
+    volumes:
+      - wp:/var/www/html
+      - ../open-antenna-validation:/var/www/html/wp-content/plugins/open-antenna-validation:ro
+
+  cli:
+    image: wordpress:cli-php8.2
+    profiles: ["cli"]
+    user: "33:33"
+    depends_on:
+      - wordpress
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - wp:/var/www/html
+      - ../open-antenna-validation:/var/www/html/wp-content/plugins/open-antenna-validation:ro
+
+volumes:
+  db:
+  wp:

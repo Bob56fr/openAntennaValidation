@@ -8,6 +8,10 @@
   <link rel="stylesheet" href="/static/results.css">
   <script src="/static/theme.js"></script>
   <style>
+    .check-line { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+    #wp .check-line input { width: 18px; height: 18px; flex: none; accent-color: var(--ink); }
+    #wp { margin-top: 28px; }
+    #wp .frow { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
     .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
     @media (max-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr); } }
     .ant { cursor: pointer; }
@@ -82,8 +86,25 @@
         </form>
       </section>
     </div>
+
+    <section id="wp">
+      <div class="sec-head"><h2>Publication sur le site</h2><p>Les campagnes que vous rendez publiques sont envoyées au site WordPress du plugin openAntennaValidation : médianes par fenêtre et description de l'installation, jamais de mesure brute ; locator réduit à 4 caractères.</p></div>
+      <form class="card form" id="wp-form" autocomplete="off">
+        <label class="check-line"><input type="checkbox" id="wp-enabled"> Publier sur le site</label>
+        <div class="frow">
+          <div class="ctl"><label class="eyebrow" for="wp-url">Adresse du site</label><input id="wp-url" type="url" placeholder="https://www.exemple.fr"></div>
+          <div class="ctl"><label class="eyebrow" for="wp-token">Jeton de la station</label><input id="wp-token" type="password" placeholder="créé dans l'administration du site, menu Antennes HF › Stations"></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" type="submit">Enregistrer</button>
+          <button class="btn ghost" type="button" id="wp-test">Tester la liaison</button>
+          <span class="ok-note" id="wp-state"></span>
+        </div>
+      </form>
+    </section>
   </main>
   <footer><div class="wrap">openAntennaValidation, logiciel libre (GPLv3).</div></footer>
   <script src="/static/installation.js"></script>
+  <script src="/static/wordpress.js"></script>
 </body>
 </html>

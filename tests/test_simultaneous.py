@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from open_antenna_validation import campaign_manager as cm
+from open_antenna_validation import service
 from open_antenna_validation.acquisition import wait_for
 from open_antenna_validation.config import (
     CONFIG_FILENAME,
@@ -45,6 +46,12 @@ def client(station_home: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Test
     config.campaign.calm_after_s = 30.0
     save_config(config, path)
     monkeypatch.setattr(web_app, "FAILED_LOGIN_DELAY_S", 0.0)
+    # The simulator runs faster than real time in one process: its load says nothing about
+    # the computer (and depends on what else pytest is doing). Verdict forced; judge_load
+    # itself is tested below.
+    real_judge = service.judge_load
+    monkeypatch.setattr(service, "judge_load", lambda *a, **k: {
+        **real_judge(*a, **k), "verdict": "ok", "message": "Charge forcée pour les tests."})
     station = Station.from_home(station_home, inline=True)
     station.startup()
     assert wait_for(lambda: all(d["state"] == "running" for d in station.devices_report()), 5)
@@ -140,7 +147,10 @@ def test_aa_calibration_then_corrected_campaign(client: TestClient) -> None:
     assert [i.split(":")[2] for i in identities] == ["SIM0001", "SIM0002"]
     correction = json.loads(profile["correction_json"])
     assert correction["channels_db"][0] == [0.0, 0.0, 0.0]
-    assert all(v == pytest.approx(-GAIN_ERROR_DB, abs=0.5) for v in correction["channels_db"][1])
+    carrier, digital, voice = correction["channels_db"][1]
+    assert carrier == pytest.approx(-GAIN_ERROR_DB, abs=0.5)
+    assert digital == pytest.approx(-GAIN_ERROR_DB, abs=0.5)
+    assert voice == pytest.approx(-GAIN_ERROR_DB, abs=1.5)  # one minute of voice: noisier
     assert json.loads(profile["margins_json"])["margins"]["carrier"] < 1.0
     profiles = client.get("/api/campaign/profiles", params={"serials": "SIM0001,SIM0002"}).json()
     assert profiles["40 m"] is not None

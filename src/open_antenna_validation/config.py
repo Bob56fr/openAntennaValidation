@@ -33,6 +33,8 @@ class StationConfig(_Section):
     callsign: str = ""
     # Maidenhead locator, 4 or 6 characters (6 kept locally, truncated for WordPress).
     locator: str = Field(default="", pattern=r"^$|^[A-Ra-r]{2}[0-9]{2}([A-Xa-x]{2})?$")
+    # IANA time zone of the station: local hours of the result pages, also on the site.
+    timezone: str = Field(default="Europe/Paris", pattern=r"^[A-Za-z_]+(/[A-Za-z0-9_+-]+)*$")
 
 
 class SdrplayConfig(_Section):
@@ -248,6 +250,24 @@ class DemoConfig(_Section):
     enabled: bool = True
 
 
+class WordPressConfig(_Section):
+    """Publication of the campaigns on the WordPress site (plugin open-antenna-validation)."""
+
+    enabled: bool = False
+    url: str = ""
+    # Token of this station, created by its operator in the WordPress administration.
+    token: str = ""
+    interval_s: float = Field(default=300.0, ge=30.0)
+    timeout_s: float = Field(default=30.0, ge=5.0)
+    retry_max_s: float = Field(default=3600.0, ge=60.0)
+    # Locator published: 4 characters (about 100 km) by default, never more than 6.
+    locator_chars: Literal[0, 2, 4, 6] = 4
+    # Windows per request (uncompressed JSON of about 30 bytes each).
+    batch_rows: int = Field(default=20_000, ge=100, le=50_000)
+    # Share of the site's package limit a campaign may use when its window is chosen.
+    package_fill: float = Field(default=0.8, gt=0.0, le=1.0)
+
+
 class WebConfig(_Section):
     host: str = "0.0.0.0"
     port: int = Field(default=8660, ge=1, le=65535)
@@ -281,6 +301,7 @@ class Config(_Section):
     qualification: QualificationConfig = Field(default_factory=QualificationConfig)
     campaign: CampaignConfig = Field(default_factory=CampaignConfig)
     demo: DemoConfig = Field(default_factory=DemoConfig)
+    wordpress: WordPressConfig = Field(default_factory=WordPressConfig)
     web: WebConfig = Field(default_factory=WebConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)

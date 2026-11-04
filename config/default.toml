@@ -9,6 +9,7 @@ id = ""                       # généré par « oav init »
 name = "Station openAntennaValidation"
 callsign = ""                 # indicatif de l'opérateur
 locator = ""                  # locator Maidenhead, 4 ou 6 caractères (ex. JN18eu)
+timezone = "Europe/Paris"     # fuseau horaire de la station (heures locales des résultats)
 
 [hardware]
 driver = "sdrplay"            # "sdrplay" ou "simulated"
@@ -192,6 +193,17 @@ am_fm = 8000.0
 
 [demo]
 enabled = true                # campagnes de démonstration tant qu'aucune vraie campagne n'existe
+
+[wordpress]
+enabled = false               # publication des campagnes sur le site (plugin open-antenna-validation)
+url = ""                      # adresse du site, par exemple https://www.exemple.fr
+token = ""                    # jeton de la station, créé par l'opérateur dans l'administration du site
+interval_s = 300.0            # un envoi toutes les N s
+timeout_s = 30.0
+retry_max_s = 3600.0          # après un échec : nouvel essai à délai croissant, au plus N s
+locator_chars = 4             # locator publié : 4 caractères (environ 100 km)
+batch_rows = 20000            # fenêtres par requête
+package_fill = 0.8            # part de la taille de paquet du site qu'une campagne peut viser
 
 [web]
 host = "0.0.0.0"              # réseau local ; ne pas exposer directement sur Internet

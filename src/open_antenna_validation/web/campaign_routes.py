@@ -43,6 +43,8 @@ class CampaignBody(BaseModel):
     aa: bool = False
     accept_limits: bool = False
     accept_load: bool = False
+    # Publication on the WordPress site: private (not sent), public, unlisted (link only).
+    visibility: Literal["private", "public", "unlisted"] = "private"
 
 
 class LoadTestBody(BaseModel):
@@ -83,6 +85,7 @@ def build_router(station: Station) -> APIRouter:
             "profiles": {b.name: profile_summary(b.name) for b in cfg.bands},
             "disk_free_bytes": free,
             "load_test_s": cfg.campaign.load_test_s,
+            "wordpress": station.publisher.report(),
             "campaign": station.campaign_report(),
         }
 

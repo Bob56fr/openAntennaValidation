@@ -66,6 +66,17 @@ others = [
 
 Chaque SDR a son propre processus d'acquisition. Avant la première campagne, faites une campagne A/A (la même antenne sur tous les SDR par un splitter) : elle mesure l'écart de gain de chaque SDR et les marges. Les SDR doivent rester branchés sur les mêmes ports et dans le même ordre de voies pour que l'étalonnage s'applique.
 
+## Publication sur un site WordPress
+
+Le plugin `open-antenna-validation` (dossier `wordpress/`, zip produit par `python wordpress/build.py --zip`) rassemble les campagnes de plusieurs opérateurs sur un site, hébergement mutualisé compris :
+
+1. Sur le site : installer et activer le plugin ; créer une page contenant `[oav_campagnes]` (et, si besoin, une page `[oav_stations]`) ; dans **Antennes HF › Réglages**, choisir cette page, le quota et la taille maximale d'une campagne. Les opérateurs sont validés dans **Antennes HF › Opérateurs**.
+2. L'opérateur crée sa station dans **Antennes HF › Stations** : le jeton s'affiche une seule fois.
+3. Sur la station : page **Installation**, section « Publication sur le site » : adresse du site et jeton, puis « Tester la liaison ».
+4. Au lancement d'une campagne, cocher « Publier cette campagne sur le site ». La station envoie les médianes par fenêtre et la description de l'installation, jamais de mesure brute ; le locator est réduit à 4 caractères.
+
+La station envoie elle-même ses données : le site n'a jamais besoin d'accéder à la station. Une coupure réseau de plusieurs jours ne perd rien.
+
 ## Sécurité
 
 La page écoute par défaut sur le réseau local (port 8660), protégée par mot de passe (argon2) et cookie de session. Ne l'exposez pas directement sur Internet : passez par un VPN.

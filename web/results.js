@@ -6,8 +6,19 @@
    (vue Installation) ; la vue Antenne ajoute les pertes de la chaîne du segment. */
 
 /* ---------- Utilitaires ---------- */
+/* Réglages : la page locale garde les valeurs par défaut ; le plugin WordPress fournit
+   window.OAV_CONFIG (adresse des résultats, paramètre de l'URL, pas d'export local). */
+const CFG = Object.assign({
+  param: "id",
+  resultsUrl: (uuid) => `/api/campaigns/${encodeURIComponent(uuid)}/results`,
+  listUrl: "/campaigns",
+  loginUrl: "/login",
+  exportUrl: (uuid, kind, dialect) => `/api/campaigns/${encodeURIComponent(uuid)}/export?kind=${kind}&dialect=${dialect}`,
+}, window.OAV_CONFIG || {});
 const $ = (id) => document.getElementById(id);
-const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// Les jetons de couleur sont portés par la racine du plugin sur le site, par <html> en local.
+const ROOT = document.querySelector(".oav-root") || document.documentElement;
+const css = (n) => getComputedStyle(ROOT).getPropertyValue(n).trim();
 const NF1 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const NF0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const MINUS = "−";
@@ -530,7 +541,7 @@ const MODE_WORD = { simultaneous: "mode simultané", switched: "mode commuté" }
 function renderStatic() {
   const c = R.campaign;
   $("demo-banner").hidden = !c.demo;
-  document.title = `${c.title} · openAntennaValidation`;
+  if (!window.OAV_CONFIG) document.title = `${c.title} · openAntennaValidation`;  // pas sur le site
   $("head-eyebrow").textContent = `${STATE_WORD[c.state] || c.state} · ${MODE_WORD[c.reception_mode] || c.reception_mode} · ${c.measure_mode === "auto" ? "bande automatique" : "fréquences imposées"}`;
   $("head-title").innerHTML = `${c.title} <span class="freq">${(c.low_hz / 1e6).toFixed(3).replace(".", ",")}–${(c.high_hz / 1e6).toFixed(3).replace(".", ",")} MHz</span>`;
   const endMs = c.end_ms || c.planned_end_ms;
@@ -607,11 +618,11 @@ function renderQuality() {
   renderExport();
 }
 function renderExport() {
-  const real = !R.campaign.demo;
+  const real = !R.campaign.demo && !!CFG.exportUrl;
   $("export-card").hidden = !real;
   if (!real) return;
   const dialect = $("csv-dialect").value;
-  const url = (kind) => `/api/campaigns/${encodeURIComponent(R.campaign.uuid)}/export?kind=${kind}&dialect=${dialect}`;
+  const url = (kind) => CFG.exportUrl(R.campaign.uuid, kind, dialect);
   $("export-links").innerHTML = `<a class="btn ghost" href="${url("aggregates")}" download>Agrégats par fenêtre</a>${R.quality.raw ? `<a class="btn ghost" href="${url("measurements")}" download>Mesures brutes</a>` : ""}`;
 }
 $("csv-dialect").addEventListener("change", () => {
@@ -653,13 +664,13 @@ $("btn-table").addEventListener("click", (e) => {
 const ro = new ResizeObserver(() => Object.values(charts).forEach((c) => c.resize()));
 document.querySelectorAll(".chart").forEach((el) => ro.observe(el));
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
-new MutationObserver(renderAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+new MutationObserver(renderAll).observe(ROOT, { attributes: true, attributeFilter: ["data-theme"] });
 
 async function start() {
-  const uuid = new URLSearchParams(location.search).get("id");
-  if (!uuid) { location.replace("/campaigns"); return; }
-  const res = await fetch(`/api/campaigns/${encodeURIComponent(uuid)}/results`);
-  if (res.status === 401) { location.replace("/login"); return; }
+  const uuid = CFG.uuid || new URLSearchParams(location.search).get(CFG.param);
+  if (!uuid) { location.replace(CFG.listUrl); return; }
+  const res = await fetch(CFG.resultsUrl(uuid));
+  if (res.status === 401 && CFG.loginUrl) { location.replace(CFG.loginUrl); return; }
   if (!res.ok) { const e = $("error"); e.hidden = false; e.textContent = res.status === 404 ? "Campagne introuvable." : `Erreur ${res.status}.`; return; }
   prepare(await res.json());
   renderAll();

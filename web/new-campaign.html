@@ -120,6 +120,10 @@
           <div class="load"><button class="btn" type="button" id="load-go">Vérifier la charge</button><span class="note" id="load-state"></span></div>
           <label class="check" id="load-accept-row" hidden><input type="checkbox" id="load-accept"> Lancer malgré une charge à la limite : des mesures pourront manquer si l'ordinateur prend du retard.</label>
         </div>
+        <div id="publish-block" hidden>
+          <label class="check"><input type="checkbox" id="publish" checked> Publier cette campagne sur le site</label>
+          <p class="note" id="publish-note"></p>
+        </div>
         <label class="check" id="accept-row" hidden><input type="checkbox" id="accept"> J'accepte les limites du profil de qualification : elles seront jointes à la campagne et affichées avec ses résultats.</label>
         <div class="row"><button class="btn primary" type="submit" id="go">Lancer la campagne</button><a class="linkbtn" href="/campaigns">Annuler</a></div>
       </section>

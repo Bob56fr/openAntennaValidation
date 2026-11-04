@@ -30,6 +30,7 @@ from open_antenna_validation.hardware import DeviceInfo, HardwareError, SdrDrive
 from open_antenna_validation.hardware import create_driver as default_factory
 from open_antenna_validation.hardware.identity import IdentityCheck, record_hardware
 from open_antenna_validation.hub import Hub
+from open_antenna_validation.publish import Publisher
 from open_antenna_validation.qualification import QualificationError, check_step, store_step
 from open_antenna_validation.storage import Database
 from open_antenna_validation.timeutil import now_ms
@@ -95,6 +96,8 @@ class Station:
         # The other SDRs (simultaneous mode), and the load test in progress or the last one.
         self._others = [_Device(slot) for slot in config.hardware.others]
         self.load_test: dict[str, Any] | None = None
+        # Publication on the WordPress site (idle while disabled in the configuration).
+        self.publisher = Publisher(db, config, self._station_status)
 
     @classmethod
     def from_home(
@@ -127,9 +130,11 @@ class Station:
         self._start_acquisition()
         for dev in self._others:
             self._start_other(dev)
+        self.publisher.start()
 
     def shutdown(self) -> None:
         self._running = False
+        self.publisher.stop()
         if self._restart is not None:
             self._restart.cancel()
         with self._lock:
@@ -343,6 +348,7 @@ class Station:
             if run.engine_started:
                 self._stop_engines(run)
             cm.finish(self.db, run, "abandoned", now_ms(), self.config)
+            self.publisher.trigger()
             self.campaign = None
         self._publish_status()
 
@@ -368,6 +374,7 @@ class Station:
                 self._stop_engines(run)
                 # Closed in the database first: whoever sees no campaign sees it finished.
                 cm.finish(self.db, run, "done", run.planned_end_ms, self.config)
+                self.publisher.trigger()
                 self.campaign = None
                 log.info("Campagne %s terminée", run.uuid)
             elif run.auto and not run.surveying and run.last_survey_ms is not None and (
@@ -726,6 +733,18 @@ class Station:
                         for d in self.devices_report()],
             "load_test": self.load_report(),
         }
+
+    def _station_status(self) -> dict[str, Any]:
+        """State of the station as published on the site."""
+        state = str(self.receiver.get("state") or "stopped")
+        if state not in ("running", "absent", "error", "starting", "stopped"):
+            state = "error"
+        models = [str(d["model"]) for d in self.devices_report() if d.get("model")]
+        sdr = models[0] if len(set(models)) <= 1 else ", ".join(models)
+        if len(models) > 1 and len(set(models)) == 1:
+            sdr = f"{len(models)} × {models[0]}"
+        return {"state": state, "sdr": sdr[:120],
+                "campaign": None if self.campaign is None else self.campaign.uuid}
 
     def devices_report(self) -> list[dict[str, Any]]:
         """Every SDR of the station, the main one first (simultaneous mode)."""

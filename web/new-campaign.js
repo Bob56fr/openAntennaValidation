@@ -168,12 +168,31 @@ function update() {
     <dt>Une mesure par signal et par ${simul ? "SDR" : "entrée"} toutes les</dt><dd>${NF1.format(period).replace(",0", "")} s</dd>
     ${simul ? `<dt>Réception</dt><dd>${nch} SDR en parallèle, sans commutation</dd>` : `<dt>Durée sur chaque entrée</dt><dd>${NF1.format(1000 / (2 * rate))} ms à ${rate} Hz</dd>`}
     <dt>Volume estimé</dt><dd>${bytes(volume)} (${bytes(setup.disk_free_bytes)} libres${setup.disk_free_bytes < need ? ` : <b style="color:var(--crit-ink)">espace insuffisant</b>` : ""})</dd>`;
+  renderPublish(dur, win, n, nch);
   const aa = $("aa").checked;
   $("ant-b").disabled = aa;
   if (aa) $("ant-b").value = $("ant-a").value;
   $("ant-note").textContent = !aa ? "" : simul
     ? "Branchez la même antenne sur tous les SDR par un splitter et des câbles identiques."
     : "Branchez la même antenne sur A et B par un splitter et deux câbles identiques.";
+}
+
+// Résolution publiée sur le site : la station élargit la fenêtre si la campagne dépasse la
+// taille de paquet du site (la base locale garde sa fenêtre).
+let publishTimer = null;
+function renderPublish(dur, win, n, nch) {
+  const wp = setup.wordpress || {};
+  $("publish-block").hidden = !wp.enabled;
+  if (!wp.enabled) return;
+  clearTimeout(publishTimer);
+  publishTimer = setTimeout(async () => {
+    try {
+      const e = await api(`/api/wordpress/estimate?duration_s=${dur}&n_signals=${n}&n_channels=${nch}&window_s=${win}`);
+      if (e.error) { $("publish-note").textContent = `Site injoignable pour l'instant (${e.error}) : la campagne sera envoyée quand il répondra.`; return; }
+      const w = (ms) => (ms >= 60000 ? `${ms / 60000} min` : `${ms / 1000} s`);
+      $("publish-note").textContent = `${e.window_ms > e.local_window_ms ? `Publiée par fenêtres de ${w(e.window_ms)} (${w(e.local_window_ms)} en local) pour tenir dans la taille autorisée par le site` : `Publiée par fenêtres de ${w(e.window_ms)}, comme en local`} : environ ${bytes(e.bytes)}${e.limit_bytes ? ` sur ${bytes(e.limit_bytes)} autorisés` : ""}.${e.full ? " Le stockage du site est plein : les envois attendront." : ""}`;
+    } catch (err) { $("publish-note").textContent = err.message; }
+  }, 300);
 }
 
 function renderQual(center) {
@@ -271,6 +290,7 @@ $("form").addEventListener("submit", async (e) => {
     duration_s: Number($("dur").value) * Number($("unit").value),
     rate_hz: reception === "simultaneous" ? null : Number($("rate").value) || null, aa,
     accept_limits: $("accept").checked, accept_load: $("load-accept").checked,
+    visibility: setup.wordpress && setup.wordpress.enabled && $("publish").checked ? "public" : "private",
   };
   try {
     $("go").disabled = true;

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/open-antenna-validation/limits.schema.json",
+  "title": "openAntennaValidation : limites du site (réponse)",
+  "description": "POST /wp-json/open-antenna-validation/v1/limits avec le jeton de la station et le corps {\"schema\": 1, \"station_id\": \"…\"} (gzip). La station lit ces limites avant de lancer une campagne et avant chaque envoi. Taille d'un paquet de campagne = longueur du JSON de ses métadonnées + nombre de fenêtres × row_bytes ; le plugin refuse (413) un envoi qui la ferait dépasser package_max_bytes (0 : pas de limite). Le nombre d'antennes n'est jamais un motif de refus : la station élargit la fenêtre publiée.",
+  "type": "object",
+  "required": ["schema", "package_max_bytes", "row_bytes", "quota_bytes", "used_bytes", "full", "operator", "station"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": 1},
+    "package_max_bytes": {"type": "integer", "minimum": 0},
+    "row_bytes": {"type": "integer", "minimum": 1},
+    "quota_bytes": {"type": "integer", "minimum": 0},
+    "used_bytes": {"type": "integer", "minimum": 0},
+    "full": {"type": "boolean"},
+    "operator": {"type": "string", "description": "Nom de l'opérateur propriétaire du jeton."},
+    "station": {"type": "string", "description": "Nom de la station sur le site."}
+  }
+}

@@ -26,6 +26,7 @@ dev = [
     "httpx>=0.27",
     "ruff>=0.4",
     "mypy>=1.9",
+    "jsonschema>=4.0",
 ]
 
 [project.scripts]
@@ -42,8 +43,9 @@ packages = ["src/open_antenna_validation"]
 testpaths = ["tests"]
 markers = [
     "hardware: needs a real SDR plugged in (run with: pytest -m hardware)",
+    "wordpress: needs the test WordPress (OAV_WP_URL, see wordpress/dev; pytest -m wordpress)",
 ]
-addopts = "-m 'not hardware' --basetemp=.pytest_tmp"
+addopts = "-m 'not hardware and not wordpress' --basetemp=.pytest_tmp"
 
 [tool.ruff]
 line-length = 100

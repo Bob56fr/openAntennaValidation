@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/open-antenna-validation/ingest.schema.json",
+  "title": "openAntennaValidation : envoi d'une station au plugin WordPress",
+  "description": "POST /wp-json/open-antenna-validation/v1/ingest (ou ?rest_route=/open-antenna-validation/v1/ingest). Corps JSON compressé gzip, déclaré Content-Type: application/gzip (WordPress lirait lui-même un corps application/json et le refuserait). Jeton de la station dans Authorization: Bearer <jeton> et X-OAV-Token (certains hébergeurs mutualisés suppriment Authorization). Idempotent : une fenêtre déjà reçue (campagne, signal, voie, début) est remplacée, pas dupliquée. Réponses : 200 {ok, campaigns: {uuid: {rows, bytes}}, limits}, 401 jeton refusé, 413 paquet de campagne trop gros (data.campaign, data.limit_bytes : la station cesse d'envoyer cette campagne), 507 quota du site atteint (la station suspend ses envois sans perdre de données). Aucune mesure brute, aucun IQ, locator tronqué.",
+  "type": "object",
+  "required": ["schema", "station", "campaigns"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": 1},
+    "station": {"$ref": "#/$defs/station"},
+    "campaigns": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/campaign"}}
+  },
+  "$defs": {
+    "station": {
+      "type": "object",
+      "required": ["id", "name", "callsign", "locator", "software", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "minLength": 8, "maxLength": 64},
+        "name": {"type": "string", "maxLength": 120},
+        "callsign": {"type": "string", "maxLength": 20},
+        "locator": {"type": "string", "pattern": "^([A-Ra-r]{2}([0-9]{2}([A-Xa-x]{2})?)?)?$"},
+        "software": {"type": "string", "maxLength": 60},
+        "status": {
+          "type": "object",
+          "required": ["ts_ms", "state"],
+          "additionalProperties": false,
+          "properties": {
+            "ts_ms": {"type": "integer"},
+            "state": {"enum": ["running", "absent", "error", "starting", "stopped"]},
+            "sdr": {"type": "string", "maxLength": 120},
+            "campaign": {"type": ["string", "null"], "maxLength": 64},
+            "queue_rows": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "campaign": {
+      "type": "object",
+      "required": ["uuid", "visibility", "step_ms", "rows", "complete"],
+      "additionalProperties": false,
+      "properties": {
+        "uuid": {"type": "string", "minLength": 8, "maxLength": 64},
+        "visibility": {"enum": ["public", "unlisted"]},
+        "meta": {"$ref": "#/$defs/meta", "description": "Absent quand rien n'a changé depuis le dernier envoi accepté."},
+        "step_ms": {"type": "integer", "minimum": 1000, "description": "Fenêtre publiée (peut être plus large que celle de la station, pour tenir dans la taille de paquet)."},
+        "rows": {
+          "type": "array",
+          "maxItems": 50000,
+          "description": "Médianes par fenêtre : [clé du signal, voie, début de fenêtre (ms UTC), RSSI dBFS, plancher dBFS], valeurs vues au SDR (vue Installation).",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {"type": "integer", "minimum": 0},
+              {"type": "integer", "minimum": 0, "maximum": 9},
+              {"type": "integer"},
+              {"type": ["number", "null"]},
+              {"type": ["number", "null"]}
+            ],
+            "minItems": 5,
+            "maxItems": 5
+          }
+        },
+        "complete": {"type": "boolean", "description": "Campagne terminée et tout envoyé."}
+      }
+    },
+    "meta": {
+      "type": "object",
+      "required": ["campaign", "channels", "segments", "signals", "activity", "quality"],
+      "additionalProperties": false,
+      "properties": {
+        "campaign": {
+          "type": "object",
+          "required": ["uuid", "title", "band", "low_hz", "high_hz", "state", "reception_mode", "measure_mode", "start_ms", "n_channels", "reference_channel", "operator", "locator", "sdr", "aa", "margins"],
+          "properties": {
+            "uuid": {"type": "string"},
+            "title": {"type": "string", "maxLength": 200},
+            "band": {"type": "string", "maxLength": 20},
+            "low_hz": {"type": "number"},
+            "high_hz": {"type": "number"},
+            "state": {"enum": ["preparation", "running", "interrupted", "done", "abandoned"]},
+            "reception_mode": {"enum": ["switched", "simultaneous"]},
+            "measure_mode": {"enum": ["fixed", "auto"]},
+            "start_ms": {"type": ["integer", "null"]},
+            "end_ms": {"type": ["integer", "null"]},
+            "planned_end_ms": {"type": ["integer", "null"]},
+            "n_channels": {"type": "integer", "minimum": 2, "maximum": 10},
+            "reference_channel": {"type": "integer", "minimum": 0, "maximum": 9},
+            "operator": {"type": "string", "maxLength": 20},
+            "locator": {"type": "string", "maxLength": 6},
+            "sdr": {"type": "string", "maxLength": 200},
+            "aa": {"type": "boolean"},
+            "margins": {"type": "object"}
+          }
+        },
+        "channels": {
+          "type": "array", "minItems": 2, "maxItems": 10,
+          "items": {
+            "type": "object",
+            "required": ["idx", "letter", "name", "type", "type_code"],
+            "properties": {
+              "idx": {"type": "integer", "minimum": 0, "maximum": 9},
+              "letter": {"type": "string", "maxLength": 1},
+              "name": {"type": ["string", "null"]},
+              "type": {"type": ["string", "null"]},
+              "type_code": {"type": ["string", "null"], "maxLength": 40}
+            }
+          }
+        },
+        "segments": {"type": "array"},
+        "signals": {
+          "type": "array", "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": ["key", "freq_hz", "class", "width_hz"],
+            "properties": {
+              "key": {"type": "integer", "minimum": 0},
+              "freq_hz": {"type": "number"},
+              "class": {"enum": ["carrier", "digital", "ssb", "am_fm", "noise"]},
+              "width_hz": {"type": "number"}
+            }
+          }
+        },
+        "activity": {"type": "array"},
+        "quality": {"type": "object"}
+      }
+    }
+  }
+}

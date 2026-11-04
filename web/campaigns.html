@@ -47,7 +47,7 @@
       return `<a class="camp" href="/campaign?id=${encodeURIComponent(c.uuid)}">
         <div><div class="b">${esc(c.band)}</div><div class="f">${(c.low_hz / 1e6).toFixed(3).replace(".", ",")}–${(c.high_hz / 1e6).toFixed(3).replace(".", ",")}</div></div>
         <div style="display:grid;gap:4px;min-width:0">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><h3>${esc(c.title)}</h3>${c.demo ? '<span class="tag demo">Démonstration</span>' : ""}<span class="tag">${STATE[c.state] || esc(c.state)}</span></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><h3>${esc(c.title)}</h3>${c.demo ? '<span class="tag demo">Démonstration</span>' : ""}<span class="tag">${STATE[c.state] || esc(c.state)}</span>${c.visibility && c.visibility !== "private" && !c.demo ? `<span class="tag">Site : ${c.publication ? esc(c.publication.word) : "en attente"}</span>` : ""}</div>
           <div class="meta"><span>${c.n_channels} antennes : ${esc(c.antenna_types.join(", "))}</span><span>${c.start_ms ? fmt.format(c.start_ms) : "—"}${days ? ` · ${days} jours` : ""}</span><span>${c.reception_mode === "switched" ? "Mode commuté" : "Mode simultané"} · ${esc(c.sdr)}</span></div>
         </div>
         <span class="linkbtn">Voir les résultats</span>
