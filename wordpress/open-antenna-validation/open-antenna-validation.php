@@ -1,9 +1,9 @@
 <?php
 /**
  * Plugin Name:       openAntennaValidation
- * Plugin URI:        https://github.com/open-antenna-validation
+ * Plugin URI:        https://github.com/Bob56fr/openAntennaValidation
  * Description:       Publie les campagnes de comparaison d'antennes HF des stations openAntennaValidation : plusieurs opérateurs, liste filtrée, page de résultats, état des stations.
- * Version:           0.1.0
+ * Version:           0.2.0
  * Requires at least: 6.0
  * Requires PHP:      8.0
  * Author:            openAntennaValidation
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('OAV_VERSION', '0.1.0');
+define('OAV_VERSION', '0.2.0');
 define('OAV_DB_VERSION', 1);
 define('OAV_FILE', __FILE__);
 define('OAV_DIR', plugin_dir_path(__FILE__));
@@ -35,6 +35,7 @@ require_once OAV_DIR . 'includes/class-oav-db.php';
 require_once OAV_DIR . 'includes/class-oav-rest.php';
 require_once OAV_DIR . 'includes/class-oav-admin.php';
 require_once OAV_DIR . 'includes/class-oav-public.php';
+require_once OAV_DIR . 'includes/class-oav-presentation.php';
 
 register_activation_hook(__FILE__, ['OAV_DB', 'install']);
 
@@ -51,3 +52,4 @@ add_action('admin_post_oav_campaigns_csv', ['OAV_Admin', 'campaigns_csv']);
 add_action('admin_post_oav_operator', ['OAV_Admin', 'operator_action']);
 add_action('admin_post_oav_settings', ['OAV_Admin', 'save_settings']);
 add_action('init', ['OAV_Public', 'register']);
+add_action('init', ['OAV_Presentation', 'register']);

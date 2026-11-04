@@ -12,10 +12,12 @@ global $wpdb;
 foreach (['windows', 'campaigns', 'stations'] as $name) {
     $wpdb->query('DROP TABLE IF EXISTS ' . $wpdb->prefix . 'oav_' . $name);
 }
-foreach (['oav_db_version', 'oav_quota_mb', 'oav_package_mb', 'oav_demo', 'oav_theme'] as $option) {
+foreach (['oav_db_version', 'oav_quota_mb', 'oav_package_mb', 'oav_demo', 'oav_theme', 'oav_list_page',
+         'oav_presentation_url', 'oav_presentation_last'] as $option) {
     delete_option($option);
 }
 delete_transient('oav_storage');
+delete_transient('oav_presentation');
 remove_role('oav_operator');
 remove_role('oav_pending');
 foreach (['administrator'] as $role_name) {

@@ -6,6 +6,7 @@ Spécification : [docs/cahier-des-charges.md](docs/cahier-des-charges.md). Écar
 
 - Développement phase par phase (section 2 du cahier des charges). Avant une phase : plan court. Après : résumé, reste à faire, procédure de test manuelle. Arrêt pour validation à chaque fin de phase.
 - Un commit par étape cohérente, message explicite en français.
+- Page de présentation publique `docs/presentation.md` (affichée sur GitHub et, par le code court `[oav_presentation]`, sur le site WordPress) : la mettre à jour à chaque fin de phase et à chaque changement visible pour les utilisateurs (état du projet, matériel, fonctions). Markdown simple : titres, paragraphes, listes, tableaux, gras, italique, code, liens.
 - Toute déviation au cahier des charges est proposée et justifiée avant implémentation, puis consignée dans `docs/decisions.md`.
 - Ne jamais inventer de fonction ou de champ des bibliothèques des fabricants (API SDRplay, librtlsdr, libairspyhf) ni d'interface des décodeurs : vérifier dans la documentation ou les en-têtes (`C:\Program Files\SDRplay\API\inc`), signaler toute incertitude.
 - Les tests sur matériel réel sont faits par l'utilisateur.

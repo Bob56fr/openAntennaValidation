@@ -31,6 +31,7 @@ wordpress/open-antenna-validation/assets/shared/
 wordpress/open-antenna-validation/assets/vendor/
 wordpress/open-antenna-validation/assets/demo/
 wordpress/open-antenna-validation/assets/antenna-types.json
+wordpress/open-antenna-validation/assets/presentation.md
 wordpress/open-antenna-validation/templates/
 wordpress/dist/
 wordpress/dev/.admin-password

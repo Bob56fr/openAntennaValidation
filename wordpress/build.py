@@ -130,6 +130,8 @@ def build() -> Path:
     templates = PLUGIN / "templates"
     templates.mkdir(exist_ok=True)
     (templates / "campaign-view.html").write_text(campaign_view(), encoding="utf-8")
+    # Copy of the presentation shipped with the plugin, for when GitHub does not answer.
+    shutil.copy2(ROOT / "docs" / "presentation.md", assets / "presentation.md")
     items = demos(demo)
     from open_antenna_validation.installation import ANTENNA_TYPES
     (assets / "antenna-types.json").write_text(json.dumps(ANTENNA_TYPES, ensure_ascii=False),

@@ -418,7 +418,9 @@ class OAV_Admin
         echo '</select></td></tr>';
         echo '<tr><th>Page de la liste</th><td>';
         wp_dropdown_pages(['name' => 'list_page', 'selected' => (int) get_option('oav_list_page', 0), 'show_option_none' => '—', 'option_none_value' => '0']);
-        echo '<p class="description">La page qui contient le code court <code>[oav_campagnes]</code> (liens depuis l\'administration). Autres codes : <code>[oav_stations]</code>, <code>[oav_campagne uuid="…"]</code>.</p></td></tr>';
+        echo '<p class="description">La page qui contient le code court <code>[oav_campagnes]</code> (liens depuis l\'administration). Autres codes : <code>[oav_stations]</code>, <code>[oav_campagne uuid="…"]</code>, <code>[oav_presentation]</code>.</p></td></tr>';
+        echo '<tr><th>Présentation du projet</th><td><input type="url" class="large-text" name="presentation_url" value="' . esc_attr(OAV_Presentation::url()) . '">'
+            . '<p class="description">Fichier Markdown affiché par le code court <code>[oav_presentation]</code>, relu toutes les heures (par défaut : docs/presentation.md du dépôt GitHub du projet).</p></td></tr>';
         echo '<tr><th>Inscriptions</th><td><label><input type="checkbox" name="pending_role" value="1"' . checked(get_option('default_role'), 'oav_pending', false)
             . '> Les nouveaux inscrits sont des opérateurs en attente de validation</label><p class="description">Les inscriptions elles-mêmes s\'ouvrent dans Réglages › Général (« Tout le monde peut s\'inscrire »).</p></td></tr>';
         echo '</table>';
@@ -437,6 +439,9 @@ class OAV_Admin
         $theme = sanitize_key($_POST['theme'] ?? 'light');
         update_option('oav_theme', in_array($theme, ['light', 'dark', 'auto'], true) ? $theme : 'light');
         update_option('oav_list_page', (int) ($_POST['list_page'] ?? 0));
+        $presentation = esc_url_raw(wp_unslash($_POST['presentation_url'] ?? ''));
+        update_option('oav_presentation_url', preg_match('#^https://#', $presentation) ? $presentation : OAV_Presentation::DEFAULT_URL);
+        delete_transient('oav_presentation');
         if (!empty($_POST['pending_role'])) {
             update_option('default_role', 'oav_pending');
         } elseif (get_option('default_role') === 'oav_pending') {
