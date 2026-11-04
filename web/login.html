@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion · openAntennaValidation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/theme.js"></script>
+</head>
+<body>
+  <main class="login-page">
+    <div class="card login">
+      <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M2 15 Q6 4 11 11 T20 7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/><path d="M2 18 Q7 9 11 14 T20 12" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linecap="round"/></svg>openAntennaValidation</div>
+      <div id="no-password" class="banner warn" hidden>
+        Aucun mot de passe n'est défini. Sur la station, lancez
+        <code>oav set-password</code>, puis rechargez cette page.
+      </div>
+      <form id="login-form">
+        <label for="password">Mot de passe de la station</label>
+        <input id="password" type="password" autocomplete="current-password" required autofocus>
+        <button class="btn primary" type="submit">Se connecter</button>
+        <div id="login-error" class="banner error" hidden></div>
+      </form>
+    </div>
+  </main>
+  <script src="/static/login.js"></script>
+</body>
+</html>

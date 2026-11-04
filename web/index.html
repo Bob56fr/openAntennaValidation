@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tableau de bord · openAntennaValidation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/theme.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M2 15 Q6 4 11 11 T20 7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/><path d="M2 18 Q7 9 11 14 T20 12" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linecap="round"/></svg>openAntennaValidation</div>
+      <nav class="tabs" aria-label="Station">
+        <span aria-current="page">Tableau de bord</span>
+        <span class="soon" title="Phase P3">Campagnes</span>
+        <span class="soon" title="Phase P2">Qualification</span>
+        <span class="soon" title="Phase P3">Installation</span>
+      </nav>
+      <div class="right">
+        <button class="linkbtn" type="button" onclick="toggleTheme()">Thème</button>
+        <button class="linkbtn" type="button" id="logout">Se déconnecter</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap head">
+    <div class="eyebrow">Récepteur</div>
+    <div class="head-row">
+      <h1 id="station-name">Station</h1>
+      <span class="pill" id="state-pill"><span class="dot"></span><span id="state-word">Démarrage</span></span>
+    </div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <main class="wrap">
+    <div class="banner error" id="error" hidden></div>
+    <div class="banner warn" id="identity-changed" hidden>
+      Le matériel a changé depuis la dernière utilisation (autre SDR, autre entrée ou autre état LNA) : les qualifications précédentes ne s'appliquent plus.
+    </div>
+
+    <section>
+      <div class="card">
+        <div class="controls">
+          <div class="ctl" id="ctl-antenna"><span class="eyebrow">Entrée d'antenne</span><div class="seg" id="antenna-seg"></div></div>
+          <div class="ctl"><label class="eyebrow" for="band">Bande</label><select id="band"></select></div>
+          <div class="ctl"><label class="eyebrow" for="freq">Fréquence centrale (kHz)</label>
+            <form id="freq-form" style="display:flex;gap:8px"><input id="freq" type="number" step="0.1" min="1000" max="30000" style="width:130px"><button class="btn ghost" type="submit">Appliquer</button></form>
+          </div>
+          <div class="ctl"><label class="eyebrow" for="gain">Gain</label><select id="gain"></select></div>
+        </div>
+        <div class="desc" id="band-note"></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Spectre en direct</h2><p id="spec-sub">Puissance par case FFT, en dBFS.</p></div>
+      <div class="card">
+        <div class="key" id="spec-key"></div>
+        <div id="spectrum" class="chart h-spec" role="img" aria-label="Spectre en direct"></div>
+      </div>
+      <div class="tiles" id="tiles"></div>
+    </section>
+  </main>
+
+  <footer><div class="wrap" id="footer">openAntennaValidation, logiciel libre (GPLv3).</div></footer>
+  <script src="/static/vendor/echarts.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
