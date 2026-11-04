@@ -66,7 +66,8 @@ def cmd_set_password(args: argparse.Namespace) -> int:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     save_config(config, path)
-    print("Mot de passe enregistré. Redémarrez le service s'il tourne.")
+    print(f"Mot de passe enregistré dans {path}")
+    print("Redémarrez le service s'il tourne, avec le même répertoire de station.")
     return 0
 
 
@@ -141,6 +142,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
     home: Path = args.home
     config = load_config(home / CONFIG_FILENAME)
     log_path = setup_logging(home, config.logging)
+    print(f"Répertoire de la station : {home}")
+    if not config.web.password_hash:
+        print(
+            "ATTENTION : aucun mot de passe dans ce répertoire, la page refusera toute connexion."
+            f" Lancez : oav --home \"{home}\" set-password"
+        )
     station = Station.from_home(home)
     host = args.host or config.web.host
     port = args.port or config.web.port
