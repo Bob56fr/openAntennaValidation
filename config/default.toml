@@ -1,0 +1,159 @@
+# Configuration par défaut de la station openAntennaValidation.
+# Copie de référence : les valeurs effectives par défaut sont définies dans
+# src/open_antenna_validation/config.py et un test vérifie que les deux restent identiques.
+# Le fichier local (config.toml dans le répertoire de la station) ne contient
+# que les valeurs à surcharger.
+
+[station]
+id = ""                       # généré par « oav init »
+name = "Station openAntennaValidation"
+callsign = ""                 # indicatif de l'opérateur
+locator = ""                  # locator Maidenhead, 4 ou 6 caractères (ex. JN18eu)
+
+[hardware]
+driver = "sdrplay"            # "sdrplay" ou "simulated"
+serial = ""                   # vide : premier appareil détecté
+sample_rate = 250000          # S/s livrés (SDRplay : 2 MS/s décimés par 8)
+antenna = ""                  # RSP2 : A ou B ; RSPdx : A, B ou C ; vide : défaut de l'appareil
+ppm = 0.0
+bias_tee = false
+# gain_step = 20              # pas de gain retenu avant une campagne
+
+[hardware.sdrplay]
+lna_state = 0                 # état LNA fixe pendant une série de mesures
+library_path = ""             # vide : emplacements d'installation standard
+
+[hardware.simulated]
+noise_dbfs = -95.0            # plancher de bruit de l'antenne A
+seed = 1
+realtime = true               # cadence d'un vrai récepteur
+antenna_b_signal_db = -3.0    # antenne B par rapport à A, sur les signaux…
+antenna_b_noise_db = 1.0      # …et sur le bruit
+fading_db = 6.0               # évanouissement lent commun aux deux antennes (crête)
+fading_period_s = 20.0
+switch_latency_ms = 1.4       # bascule d'antenne simulée : délai…
+switch_glitch_db = 6.0        # …parasite…
+switch_settle_ms = 1.6        # …et temps d'établissement
+
+[[hardware.simulated.signals]]  # signaux HF simulés, décalés par rapport au centre
+offset_hz = -62000.0
+kind = "carrier"              # "carrier", "ssb" ou "ft8"
+dbfs = -62.0
+
+[[hardware.simulated.signals]]
+offset_hz = -26000.0
+kind = "ft8"
+dbfs = -72.0
+
+[[hardware.simulated.signals]]
+offset_hz = -10000.0
+kind = "ssb"
+dbfs = -58.0
+
+[[hardware.simulated.signals]]
+offset_hz = 45000.0
+kind = "ssb"
+dbfs = -66.0
+
+[receiver]
+center_frequency_hz = 7100000.0  # fréquence écoutée hors campagne (tableau de bord)
+dc_offset_hz = 0.0            # décalage d'accord pour écarter le pic DC des signaux mesurés
+
+[spectrum]
+fft_size = 4096               # 1024, 2048, 4096 ou 8192 points
+fps = 5.0                     # images par seconde envoyées à la page
+block_ms = 100                # durée des blocs IQ traités
+display_points = 1024         # points par spectre affiché (maximum par groupe de cases)
+clip_threshold = 0.99         # fraction de la pleine échelle
+clip_alert_ratio = 0.001      # alerte au-delà de 0,1 % d'échantillons écrêtés
+
+# Plan de bandes : IARU Région 1, CB, 45 m et 85 m (cahier des charges, section 3).
+[[bands]]
+name = "80 m"
+low_hz = 3500000.0
+high_hz = 3800000.0
+note = ""
+
+[[bands]]
+name = "85 m"
+low_hz = 3400000.0
+high_hz = 3500000.0
+note = "3,450 MHz ± 50 kHz"
+
+[[bands]]
+name = "60 m"
+low_hz = 5351500.0
+high_hz = 5366500.0
+note = "Variable selon les pays"
+
+[[bands]]
+name = "45 m"
+low_hz = 6610000.0
+high_hz = 6710000.0
+note = "6,660 MHz ± 50 kHz"
+
+[[bands]]
+name = "40 m"
+low_hz = 7000000.0
+high_hz = 7200000.0
+note = ""
+
+[[bands]]
+name = "30 m"
+low_hz = 10100000.0
+high_hz = 10150000.0
+note = ""
+
+[[bands]]
+name = "20 m"
+low_hz = 14000000.0
+high_hz = 14350000.0
+note = ""
+
+[[bands]]
+name = "17 m"
+low_hz = 18068000.0
+high_hz = 18168000.0
+note = ""
+
+[[bands]]
+name = "15 m"
+low_hz = 21000000.0
+high_hz = 21450000.0
+note = ""
+
+[[bands]]
+name = "12 m"
+low_hz = 24890000.0
+high_hz = 24990000.0
+note = ""
+
+[[bands]]
+name = "CB 11 m"
+low_hz = 26000000.0
+high_hz = 28000000.0
+note = "CB et bandes voisines"
+
+[[bands]]
+name = "10 m"
+low_hz = 28000000.0
+high_hz = 29700000.0
+note = ""
+
+[web]
+host = "0.0.0.0"              # réseau local ; ne pas exposer directement sur Internet
+port = 8660
+password_hash = ""            # « oav set-password »
+session_secret = ""           # généré par « oav init »
+session_max_age_hours = 12
+https_only = false            # true derrière un proxy HTTPS (cookie Secure)
+
+[storage]
+database = "oav.sqlite3"
+raw_retention_days = 90       # mesures brutes gardées après la fin de la campagne
+
+[logging]
+level = "INFO"
+file = "logs/oav.log"
+max_bytes = 5000000
+backup_count = 5
