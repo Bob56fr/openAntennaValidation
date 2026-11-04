@@ -73,22 +73,30 @@ def cmd_set_password(args: argparse.Namespace) -> int:
 
 def cmd_detect(args: argparse.Namespace) -> int:
     config = load_config(args.home / CONFIG_FILENAME)
-    driver = create_driver(config.hardware)
-    availability = driver.availability()
-    if not availability.available:
-        print(availability.message)
-        if availability.help_url:
-            print(availability.help_url)
-        return 2
-    print(f"Pilote {driver.name} — {availability.library_version}")
-    devices = driver.detect()
-    for device in devices:
-        inputs = ", ".join(driver.antennas(device)) or "une seule"
-        print(f"  {device.model}  n° {device.serial}  entrées : {inputs}")
-    if not devices:
-        print("  aucun appareil détecté")
-    driver.shutdown()
-    return 0 if devices else 1
+    hw = config.hardware
+    # Every driver of the station: the main SDR's, and those of the other SDRs.
+    configs = {c.driver: c for c in [hw, *(hw.for_slot(s) for s in hw.others)]}
+    found = 0
+    for cfg in configs.values():
+        driver = create_driver(cfg)
+        availability = driver.availability()
+        if not availability.available:
+            print(f"Pilote {driver.name} : {availability.message}")
+            if availability.help_url:
+                print(availability.help_url)
+            continue
+        print(f"Pilote {driver.name} — {availability.library_version}")
+        devices = driver.detect()
+        for device in devices:
+            inputs = ", ".join(driver.antennas(device)) or "une seule"
+            print(f"  {device.model}  n° {device.serial}  entrées : {inputs}")
+            if device.details.get("warning"):
+                print(f"    attention : {device.details['warning']}")
+        if not devices:
+            print("  aucun appareil détecté")
+        found += len(devices)
+        driver.shutdown()
+    return 0 if found else 1
 
 
 def cmd_probe(args: argparse.Namespace) -> int:
@@ -96,7 +104,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
     config = load_config(args.home / CONFIG_FILENAME)
     driver = create_driver(config.hardware)
     try:
-        driver.set_sample_rate(config.hardware.sample_rate)
+        driver.set_sample_rate(driver.pick_sample_rate(config.hardware.sample_rate))
         device = driver.open(config.hardware.serial or None)
         print(f"Ouvert : {device.model} n° {device.serial}")
         driver.set_frequency(args.frequency)
@@ -183,7 +191,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     stdin_help = "lire le mot de passe sur l'entrée standard"
     p = sub.add_parser("init", help="créer la configuration et la base")
-    p.add_argument("--driver", choices=["sdrplay", "simulated"])
+    p.add_argument("--driver", choices=["sdrplay", "rtlsdr", "airspyhf", "simulated"])
     p.add_argument("--stdin", action="store_true", help=stdin_help)
     p.set_defaults(func=cmd_init)
 

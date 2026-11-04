@@ -1,6 +1,7 @@
 """Hardware layer. Nothing outside this package knows a specific SDR."""
 
 from open_antenna_validation.config import HardwareConfig
+from open_antenna_validation.hardware.airspyhf import AirspyhfDriver
 from open_antenna_validation.hardware.base import (
     Availability,
     DeviceInfo,
@@ -13,6 +14,7 @@ from open_antenna_validation.hardware.base import (
     SwitchCommand,
     hardware_identity,
 )
+from open_antenna_validation.hardware.rtlsdr import RtlsdrDriver
 from open_antenna_validation.hardware.sdrplay import SdrplayDriver
 from open_antenna_validation.hardware.simulated import SimulatedDriver
 
@@ -21,6 +23,10 @@ def create_driver(config: HardwareConfig) -> SdrDriver:
     driver: SdrDriver
     if config.driver == "simulated":
         driver = SimulatedDriver(config.simulated)
+    elif config.driver == "rtlsdr":
+        driver = RtlsdrDriver(config.rtlsdr, sample_rate=config.sample_rate)
+    elif config.driver == "airspyhf":
+        driver = AirspyhfDriver(config.airspyhf, sample_rate=config.sample_rate)
     else:
         driver = SdrplayDriver(config.sdrplay, sample_rate=config.sample_rate)
     driver.set_antenna(config.antenna)

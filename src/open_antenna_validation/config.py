@@ -21,6 +21,7 @@ APP_DIR = "open-antenna-validation"
 
 # Antenna port; empty: the device default.
 Antenna = Literal["", "A", "B", "C"]
+DriverName = Literal["sdrplay", "rtlsdr", "airspyhf", "simulated"]
 
 
 class _Section(BaseModel):
@@ -40,6 +41,18 @@ class StationConfig(_Section):
 class SdrplayConfig(_Section):
     # Fixed for a whole measurement series: the sweepable steps are the IF gain reductions.
     lna_state: int = Field(default=0, ge=0, le=27)
+    # Empty: search the standard install locations.
+    library_path: str = ""
+
+
+class RtlsdrConfig(_Section):
+    # librtlsdr of the RTL-SDR Blog branch (HF upconverter of the V4). Empty: standard places.
+    library_path: str = ""
+
+
+class AirspyhfConfig(_Section):
+    # Preamplifier (+6 dB, compensated in digital by the receiver): fixed for a series.
+    lna: bool = False
     # Empty: search the standard install locations.
     library_path: str = ""
 
@@ -91,6 +104,8 @@ class SdrSlot(_Section):
     """Another SDR of the station (simultaneous mode: one SDR per antenna)."""
 
     serial: str
+    # Driver of this SDR; empty: the same as the main SDR (mixed models are allowed).
+    driver: Literal["", "sdrplay", "rtlsdr", "airspyhf", "simulated"] = ""
     # RSP2: input used by this SDR (empty: the device default).
     antenna: Antenna = ""
     # Simulated driver only: how this SDR sees the air (see SimulatedConfig).
@@ -100,10 +115,11 @@ class SdrSlot(_Section):
 
 
 class HardwareConfig(_Section):
-    driver: Literal["sdrplay", "simulated"] = "sdrplay"
+    driver: DriverName = "sdrplay"
     # Empty: first device detected by the driver.
     serial: str = ""
-    # Delivered IQ rate; must be one of the driver's supported rates.
+    # Wanted IQ rate: each SDR takes its lowest supported rate at or above it (else its
+    # highest), so one value fits every model of the station.
     sample_rate: int = Field(default=250_000, gt=0)
     # RSP2: A or B; RSPdx: A, B or C. Empty: the device default.
     antenna: Antenna = ""
@@ -112,6 +128,8 @@ class HardwareConfig(_Section):
     # Gain step chosen before a campaign. None: driver default.
     gain_step: int | None = Field(default=None, ge=0)
     sdrplay: SdrplayConfig = Field(default_factory=SdrplayConfig)
+    rtlsdr: RtlsdrConfig = Field(default_factory=RtlsdrConfig)
+    airspyhf: AirspyhfConfig = Field(default_factory=AirspyhfConfig)
     simulated: SimulatedConfig = Field(default_factory=SimulatedConfig)
     # The other SDRs of the station, for the simultaneous mode (up to 9 more).
     others: list[SdrSlot] = Field(default_factory=list, max_length=9)
@@ -122,7 +140,8 @@ class HardwareConfig(_Section):
             "serial": slot.serial, "signal_offset_db": slot.sim_signal_offset_db,
             "noise_offset_db": slot.sim_noise_offset_db,
             "gain_error_db": slot.sim_gain_error_db})
-        return self.model_copy(update={"serial": slot.serial, "antenna": slot.antenna,
+        return self.model_copy(update={"driver": slot.driver or self.driver,
+                                       "serial": slot.serial, "antenna": slot.antenna,
                                        "simulated": sim, "others": []})
 
 

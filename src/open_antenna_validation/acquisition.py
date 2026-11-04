@@ -80,7 +80,7 @@ def run_acquisition(
                         "message": f"Aucun SDR{wanted} branché."})
             driver.shutdown()
             return
-        driver.set_sample_rate(hardware.sample_rate)
+        driver.set_sample_rate(driver.pick_sample_rate(hardware.sample_rate))
         device = driver.open(hardware.serial or None)
         driver.set_ppm(hardware.ppm)
         driver.set_bias_tee(hardware.bias_tee)

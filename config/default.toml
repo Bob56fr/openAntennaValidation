@@ -12,17 +12,24 @@ locator = ""                  # locator Maidenhead, 4 ou 6 caractères (ex. JN18
 timezone = "Europe/Paris"     # fuseau horaire de la station (heures locales des résultats)
 
 [hardware]
-driver = "sdrplay"            # "sdrplay" ou "simulated"
+driver = "sdrplay"            # "sdrplay", "rtlsdr", "airspyhf" ou "simulated"
 serial = ""                   # vide : premier appareil détecté
-sample_rate = 250000          # S/s livrés (SDRplay : 2 MS/s décimés par 8)
+sample_rate = 250000          # S/s voulus : chaque SDR prend sa plus basse fréquence possible au-dessus
 antenna = ""                  # RSP2 : A ou B ; RSPdx : A, B ou C ; vide : défaut de l'appareil
 ppm = 0.0
 bias_tee = false
 # gain_step = 20              # pas de gain retenu avant une campagne
-others = []                   # mode simultané : les autres SDR ([[hardware.others]] : serial, antenna)
+others = []                   # mode simultané : les autres SDR ([[hardware.others]] : serial, driver, antenna)
 
 [hardware.sdrplay]
 lna_state = 0                 # état LNA fixe pendant une série de mesures
+library_path = ""             # vide : emplacements d'installation standard
+
+[hardware.rtlsdr]
+library_path = ""             # librtlsdr de la branche RTL-SDR Blog ; vide : emplacements standard
+
+[hardware.airspyhf]
+lna = false                   # préampli +6 dB, fixe pendant une série de mesures
 library_path = ""             # vide : emplacements d'installation standard
 
 [hardware.simulated]

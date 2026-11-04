@@ -177,7 +177,15 @@ class SdrDriver(ABC):
         return 0
 
     @abstractmethod
-    def supported_sample_rates(self) -> list[int]: ...
+    def supported_sample_rates(self) -> list[int]:
+        """Rates the device delivers; [] while unknown (some drivers read them at open)."""
+
+    def pick_sample_rate(self, wanted: int) -> int:
+        """Lowest supported rate at or above ``wanted``, else the highest one."""
+        rates = sorted(self.supported_sample_rates())
+        if not rates:
+            return wanted
+        return next((r for r in rates if r >= wanted), rates[-1])
 
     def overload(self) -> bool:
         """True while the hardware reports an ADC overload (drivers that can tell)."""

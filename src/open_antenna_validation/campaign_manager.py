@@ -80,21 +80,37 @@ DC_GUARD_HZ = 2_000.0
 NOISE_REACH_HZ = 5_000.0
 
 
-def dc_free_tuning(signals: list[dict[str, Any]], center: float, bandwidth: float) -> float:
+def tuning_range(sdrs: list[dict[str, Any]]) -> tuple[float, float]:
+    """Tuning frequencies every SDR accepts (the RTL-SDR V4 stays below 28.8 MHz)."""
+    low, high = 0.0, float("inf")
+    for d in sdrs:
+        reported = d.get("frequency_range") or []
+        if len(reported) == 2:
+            low, high = max(low, float(reported[0])), min(high, float(reported[1]))
+    return low, high
+
+
+def dc_free_tuning(signals: list[dict[str, Any]], center: float, bandwidth: float,
+                   allowed: tuple[float, float] = (0.0, float("inf"))) -> float:
     """Tuning frequency that keeps every signal away from the DC spike and inside the band.
 
-    Tries the centre first, then shifts by 1 kHz steps on either side.
+    Tries the centre first, then shifts by 1 kHz steps on either side, within ``allowed``.
     """
     half = bandwidth / 2
     for step in range(0, int(half // 1000) + 1):
         for shift in ((0.0,) if step == 0 else (step * 1000.0, -step * 1000.0)):
             tune = center + shift
-            ok = all(
+            ok = allowed[0] <= tune <= allowed[1] and all(
                 abs(s["freq_hz"] - tune) >= s["width_hz"] / 2 + DC_GUARD_HZ
                 and abs(s["freq_hz"] - tune) + s["width_hz"] / 2 + NOISE_REACH_HZ <= half
                 for s in signals)
             if ok:
                 return tune
+    if not allowed[0] <= center <= allowed[1]:
+        raise CampaignError(
+            f"Ces fréquences demandent d'accorder le SDR hors de sa plage ({allowed[0] / 1e6:.1f} "
+            f"à {allowed[1] / 1e6:.1f} MHz) en les gardant dans sa bande utile : resserrez-les "
+            "ou faites plusieurs campagnes.")
     raise CampaignError("Impossible d'écarter toutes les fréquences du pic central du SDR "
                         "en les gardant dans sa bande utile : réduisez l'écart entre elles.")
 
@@ -135,10 +151,19 @@ def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
                 f"bande utile du SDR ({bandwidth / 1e3:.0f} kHz, moins le voisinage du bruit). "
                 "Faites plusieurs campagnes.")
         center = (low + high) / 2
-        sdr_hz = center  # detection keeps the signals away from the DC spike
+        # Detection keeps the signals away from the DC spike; the tuning only has to stay in
+        # every SDR's range with the whole band inside the usable band.
+        tune_low, tune_high = tuning_range(sdrs)
+        sdr_hz = min(max(center, tune_low), tune_high)
+        reach = bandwidth / 2 - NOISE_REACH_HZ
+        if low < sdr_hz - reach or high > sdr_hz + reach:
+            raise CampaignError(
+                f"Cette bande demande d'accorder le SDR hors de sa plage ({tune_low / 1e6:.1f} à "
+                f"{tune_high / 1e6:.1f} MHz) : resserrez-la ou faites plusieurs campagnes.")
         signals: list[dict[str, Any]] = []
     else:
-        low, high, center, sdr_hz, signals = _fixed_frequencies(cfg, request, bandwidth)
+        low, high, center, sdr_hz, signals = _fixed_frequencies(cfg, request, bandwidth,
+                                                                tuning_range(sdrs))
     band = next((b.name for b in cfg.bands if b.low_hz <= center <= b.high_hz), "")
     if not 1e6 <= center <= 30e6:
         raise CampaignError("Les fréquences doivent être dans la bande HF (1 à 30 MHz).")
@@ -167,7 +192,8 @@ def _simultaneous_sdrs(request: dict[str, Any], devices: list[dict[str, Any]]
     return sdrs
 
 
-def _fixed_frequencies(cfg: Config, request: dict[str, Any], bandwidth: float
+def _fixed_frequencies(cfg: Config, request: dict[str, Any], bandwidth: float,
+                       allowed: tuple[float, float]
                        ) -> tuple[float, float, float, float, list[dict[str, Any]]]:
     freqs = request.get("frequencies") or []
     if not freqs:
@@ -189,7 +215,7 @@ def _fixed_frequencies(cfg: Config, request: dict[str, Any], bandwidth: float
             f"Les fréquences couvrent {(high - low) / 1e3:.1f} kHz : elles doivent tenir dans la "
             f"bande utile du SDR ({bandwidth / 1e3:.0f} kHz). Faites plusieurs campagnes.")
     center = (low + high) / 2
-    return low, high, center, dc_free_tuning(signals, center, bandwidth), signals
+    return low, high, center, dc_free_tuning(signals, center, bandwidth, allowed), signals
 
 
 def _create(db: Database, cfg: Config, request: dict[str, Any], sdrs: list[dict[str, Any]],
