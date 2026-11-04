@@ -6,7 +6,7 @@ Compare la réception de deux à dix antennes HF en mesurant, sur les mêmes sig
 - Décisions et écarts : [docs/decisions.md](docs/decisions.md)
 - Maquettes de l'interface : [design/](design/)
 
-État : phase P3. Une station en mode commuté (un SDR à deux entrées) qualifie sa commutation, décrit ses antennes et leurs chaînes, puis mène des campagnes de mesure sur des fréquences imposées, de 1 minute à 1 mois, consultables pendant et après la mesure. En bande automatique, le programme relève la bande, choisit lui-même ses signaux et les réévalue. Le mode simultané (plusieurs SDR) arrive avec la phase P5.
+État : phase P5. Une station en mode commuté (un SDR à deux entrées) qualifie sa commutation, décrit ses antennes et leurs chaînes, puis mène des campagnes de mesure sur des fréquences imposées, de 1 minute à 1 mois, consultables pendant et après la mesure. En bande automatique, le programme relève la bande, choisit lui-même ses signaux et les réévalue. En mode simultané, chaque antenne a son SDR (2 à 10) : un test de charge vérifie que l'ordinateur suit, une campagne A/A étalonne l'ensemble.
 
 ## Deux façons de comparer
 
@@ -49,6 +49,22 @@ Le répertoire de la station (configuration, base, journaux) est `%PROGRAMDATA%\
 | `oav detect` | Liste les SDR détectés et leurs entrées |
 | `oav probe [--frequency 7.1e6] [--gain-step N]` | Ouvre le SDR, mesure niveau, plancher et écrêtage sur chaque entrée |
 | `oav serve` | Lance le service et la page web |
+
+## Plusieurs SDR (mode simultané)
+
+Le SDR principal est décrit dans la section `[hardware]` de `config.toml` ; les autres s'ajoutent dans la liste `others`, par numéro de série (affiché par `oav detect`) :
+
+```toml
+[hardware]
+driver = "sdrplay"
+serial = "1234567890"
+antenna = "A"
+others = [
+    { serial = "2345678901", antenna = "A" },
+]
+```
+
+Chaque SDR a son propre processus d'acquisition. Avant la première campagne, faites une campagne A/A (la même antenne sur tous les SDR par un splitter) : elle mesure l'écart de gain de chaque SDR et les marges. Les SDR doivent rester branchés sur les mêmes ports et dans le même ordre de voies pour que l'étalonnage s'applique.
 
 ## Sécurité
 

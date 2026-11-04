@@ -149,6 +149,7 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
             "operator": params.get("operator", c["callsign"]), "locator": params.get("locator", ""),
             "timezone": params.get("timezone", ""),
             "margins": params.get("margins", {}), "qualification": params.get("qualification"),
+            "load_test": params.get("load_test"),
             "spacing_note": params.get("spacing_note", ""),
         },
         "channels": channels,

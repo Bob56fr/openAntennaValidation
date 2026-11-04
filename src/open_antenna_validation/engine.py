@@ -74,6 +74,9 @@ class CampaignRunner:
         self.next_emit = self.period
         self.clip_threshold = float(spec["clip_threshold"])
         self.clip_alert = float(spec["clip_alert_ratio"])
+        # Simultaneous mode: the first period starts at the wall-clock instant start_ms on
+        # every SDR (real receivers; a simulator faster than real time has no wall clock).
+        self.aligned = not (spec.get("align") and driver.realtime)
         self._prepare_bins()
         self._reset()
 
@@ -119,19 +122,53 @@ class CampaignRunner:
         # first sample of the period (alignment of the SDRs, real receivers only).
         self.cpu_start = time.process_time()
         self.busy_s = 0.0
-        self.period_wall_ms: float | None = None
+        self.period_first: int | None = None
+        self.epoch = math.inf
+
+    def _observe(self) -> None:
+        """Wall time of sample 0 of the stream, seen after a read: a read returns when its
+        last sample has arrived or later (backlog, busy processor), never earlier, so the
+        smallest value over many reads is the best estimate."""
+        self.epoch = min(self.epoch, time.time() - self.driver.sample_counter() / self.rate)
 
     # --- one cycle -----------------------------------------------------------------
 
+    def _wait_for_start(self) -> None:
+        """Drop the samples received before the common start instant.
+
+        The wall time of a sample is known when it is read without delay: first catch up
+        with the stream (a read that has to wait means no backlog is left), then drop up to
+        the start instant.
+        """
+        self.aligned = True
+        step = max(1, int(self.rate * 0.005))
+        for _ in range(400):
+            begin = time.perf_counter()
+            self.driver.read_iq(step)
+            if time.perf_counter() - begin > 0.002:
+                break
+        for _ in range(40):  # 0.2 s of reads at the live edge of the stream
+            self.driver.read_iq(step)
+            self._observe()
+        start_sample = int((self.start_ms / 1000 - self.epoch) * self.rate)
+        skip = start_sample - self.driver.sample_counter()
+        if 0 < skip < 10 * self.rate:
+            self.driver.read_iq(skip)
+        self._reset()
+
     def cycle(self) -> list[dict[str, Any]]:
         """Visit every input once; returns the events to send (measurement, spectra)."""
+        if not self.aligned:
+            self._wait_for_start()
         for ch, name in enumerate(self.inputs):
             if self.switching:
                 self.driver.set_antenna(name)
             chunk = self.driver.read_iq(self.dwell)
             work_start = time.perf_counter()
-            if self.period_wall_ms is None and self.driver.realtime:
-                self.period_wall_ms = time.time() * 1000 - self.dwell * 1000 / self.rate
+            if self.driver.realtime:
+                self._observe()
+                if self.period_first is None:
+                    self.period_first = self.driver.sample_counter() - self.dwell
             self.samples += self.dwell
             usable = chunk[self.blank :]
             if clipping_ratio(usable, self.clip_threshold) >= self.clip_alert:
@@ -177,7 +214,8 @@ class CampaignRunner:
             "type": "measurement", "campaign": self.spec["campaign"], "ts_ms": ts,
             "period_ms": int(self.period * 1000 / self.rate), "values": values,
             "channel_base": self.channel_base,
-            "wall_ms": None if self.period_wall_ms is None else round(self.period_wall_ms, 1),
+            "wall_ms": None if self.period_first is None or math.isinf(self.epoch)
+            else round((self.epoch + self.period_first / self.rate) * 1000, 2),
             "cpu_s": round(time.process_time() - self.cpu_start, 4),
             "busy_s": round(self.busy_s, 4), "audio_s": self.period / self.rate,
             "dropped": self.driver.dropped_samples(),

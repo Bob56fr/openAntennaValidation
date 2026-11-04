@@ -26,6 +26,15 @@
     .verd span { display: inline-flex; gap: 6px; align-items: center; }
     .ico { width: 15px; height: 15px; display: inline-block; vertical-align: -3px; flex: none; }
     dl.facts { max-width: 560px; }
+    .sdrs { display: grid; gap: 6px; }
+    .sdr-row { display: grid; grid-template-columns: 28px minmax(0, 1.2fr) 70px minmax(0, 1.6fr); gap: 10px; align-items: center; font-size: 14px; }
+    .sdr-row.head { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-family: var(--font-cond); font-weight: 600; }
+    .sdr-row .mono { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-2); }
+    .sdr-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--ink); }
+    .sdr-row.off { color: var(--muted); }
+    @media (max-width: 620px) { .sdr-row { grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.4fr); } .sdr-row .in { display: none; } }
+    #sim-ants:not([hidden]) { display: grid; gap: 12px; }
+    .load { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
   </style>
 </head>
 <body>
@@ -42,7 +51,7 @@
     </div>
   </header>
   <div class="wrap head">
-    <div class="eyebrow">Campagne · mode commuté</div>
+    <div class="eyebrow" id="eyebrow">Campagne</div>
     <h1>Nouvelle campagne</h1>
     <div class="meta" id="meta"></div>
   </div>
@@ -51,13 +60,23 @@
     <div class="banner warn" id="blocker" hidden></div>
     <form class="steps" id="form" autocomplete="off">
       <section class="step">
+        <h2>Réception</h2>
+        <div class="seg" id="reception"><button type="button" data-v="switched" aria-pressed="true">Commutée : un SDR, entrées A et B</button><button type="button" data-v="simultaneous" aria-pressed="false">Simultanée : un SDR par antenne</button></div>
+        <p class="note" id="rx-note"></p>
+      </section>
+
+      <section class="step">
         <h2>Antennes</h2>
-        <div class="row">
+        <div class="row" id="sw-ants">
           <div class="ctl"><label class="eyebrow" for="ant-a">Entrée A</label><select id="ant-a"></select></div>
           <div class="ctl"><label class="eyebrow" for="ant-b">Entrée B</label><select id="ant-b"></select></div>
           <div class="ctl"><label class="eyebrow" for="ref">Référence</label><select id="ref"><option value="0">Entrée A</option><option value="1">Entrée B</option></select></div>
         </div>
-        <label class="check"><input type="checkbox" id="aa"> Campagne A/A : la même antenne sur les deux entrées, par un splitter. L'écart vrai est nul ; ce qui reste mesure l'erreur de la méthode et donne les marges par classe de signal au profil de qualification.</label>
+        <div id="sim-ants" hidden>
+          <div class="sdrs" id="sdrs"></div>
+          <div class="row"><div class="ctl"><label class="eyebrow" for="sim-ref">Référence</label><select id="sim-ref"></select></div></div>
+        </div>
+        <label class="check"><input type="checkbox" id="aa"> <span id="aa-label"></span></label>
         <p class="note" id="ant-note"></p>
       </section>
 
@@ -88,7 +107,7 @@
         <div class="row">
           <div class="ctl"><label class="eyebrow" for="dur">Durée</label><input id="dur" type="number" min="1" step="1" value="24" style="width:100px"></div>
           <div class="ctl"><label class="eyebrow" for="unit">Unité</label><select id="unit"><option value="60">minutes</option><option value="3600" selected>heures</option><option value="86400">jours</option></select></div>
-          <div class="ctl"><label class="eyebrow" for="rate">Commutation (Hz)</label><input id="rate" type="number" min="1" max="100" step="1" style="width:100px"></div>
+          <div class="ctl" id="rate-ctl"><label class="eyebrow" for="rate">Commutation (Hz)</label><input id="rate" type="number" min="1" max="100" step="1" style="width:100px"></div>
           <div class="ctl"><label class="eyebrow" for="title">Titre (facultatif)</label><input id="title" type="text" style="width:280px" placeholder="sinon : antenne A contre antenne B"></div>
         </div>
         <dl class="facts" id="plan"></dl>
@@ -97,6 +116,10 @@
       <section class="step">
         <h2>Qualification et lancement</h2>
         <div id="qual"></div>
+        <div id="load-block" hidden>
+          <div class="load"><button class="btn" type="button" id="load-go">Vérifier la charge</button><span class="note" id="load-state"></span></div>
+          <label class="check" id="load-accept-row" hidden><input type="checkbox" id="load-accept"> Lancer malgré une charge à la limite : des mesures pourront manquer si l'ordinateur prend du retard.</label>
+        </div>
         <label class="check" id="accept-row" hidden><input type="checkbox" id="accept"> J'accepte les limites du profil de qualification : elles seront jointes à la campagne et affichées avec ses résultats.</label>
         <div class="row"><button class="btn primary" type="submit" id="go">Lancer la campagne</button><a class="linkbtn" href="/campaigns">Annuler</a></div>
       </section>

@@ -6,6 +6,8 @@ const $ = (id) => document.getElementById(id);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const NF1 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const NF3 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+const NF0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const f1 = (v) => (v == null || Number.isNaN(v) ? "—" : NF1.format(v).replace("-", "−"));
 const mhz = (hz) => NF3.format(hz / 1e6);
 const ANTENNA_SLOT = { A: 1, B: 2, C: 3, "": 1 };
@@ -79,10 +81,24 @@ function renderStatus(report) {
   // Fréquence
   if (document.activeElement !== $("freq") && report.center_hz) $("freq").value = (report.center_hz / 1000).toFixed(1);
   renderCampaign(report.campaign);
+  renderDevices(report.devices || []);
   // Sans récepteur, ou pendant une campagne, les commandes manuelles n'ont rien à piloter.
   const free = live && !report.campaign;
   document.querySelectorAll("#antenna-seg button, #gain, #band, #freq-form button").forEach((el) => { el.disabled = !free; });
   renderBandNote();
+}
+
+function renderDevices(list) {
+  $("devices-sec").hidden = list.length < 2;
+  if (list.length < 2) return;
+  const used = new Set((hw.campaign && hw.campaign.reception === "simultaneous" && hw.campaign.devices) || []);
+  $("devices").innerHTML = `<thead><tr><th>SDR</th><th>Numéro</th><th>Entrée</th><th>État</th><th class="num">Fréquence (kHz)</th><th class="num">Échantillons perdus</th><th>Campagne</th></tr></thead><tbody>` +
+    list.map((d) => {
+      const [word, cls] = STATE[d.state] || [d.state || "—", ""];
+      return `<tr><td>${esc(d.model || "SDR")}${d.primary ? " <span class=\"tag\">principal</span>" : ""}</td><td class="mono">${esc(d.serial)}</td><td>${esc(d.input || "—")}</td>
+        <td><span class="pill ${cls}"><span class="dot"></span>${esc(word)}</span>${d.overload ? " <span class=\"tag\">surcharge</span>" : ""}${d.error && d.state !== "running" ? ` <span class="desc">${esc(d.error)}</span>` : ""}</td>
+        <td class="num">${d.center_hz ? NF1.format(d.center_hz / 1000) : "—"}</td><td class="num">${NF0.format(d.dropped || 0)}</td><td>${used.has(d.serial) ? "en mesure" : ""}</td></tr>`;
+    }).join("") + "</tbody>";
 }
 
 function renderBandNote() {
@@ -122,12 +138,13 @@ function renderCampaign(c) {
   const done = Math.min(1, Math.max(0, (now - c.start_ms) / total));
   const state = c.state === "interrupted" ? ["Interrompue", "bad"] : c.surveying ? ["Relevé de la bande", "warn"]
     : c.calm ? ["Bande calme", ""] : ["Bande active", "ok"];
-  $("camp-eyebrow").textContent = `Campagne en cours${c.aa ? " · A/A" : ""} · mode commuté · ${c.auto ? "bande automatique" : "fréquences imposées"}`;
+  const simul = c.reception === "simultaneous";
+  $("camp-eyebrow").textContent = `Campagne en cours${c.aa ? " · A/A" : ""} · ${simul ? "réception simultanée" : "mode commuté"} · ${c.auto ? "bande automatique" : "fréquences imposées"}`;
   $("camp-title").textContent = c.title;
   $("camp-pill").className = `pill ${state[1]}`; $("camp-word").textContent = state[0];
   $("camp-results").href = `/campaign?id=${encodeURIComponent(c.uuid)}`;
   $("camp-progress").style.width = `${Math.round(done * 100)}%`;
-  $("camp-meta").innerHTML = `<span>${c.signals} ${c.auto ? "signal" : "fréquence"}${c.signals > 1 ? "s" : ""} suivi${c.auto && c.signals > 1 ? "s" : ""} · commutation ${c.rate_hz} Hz</span>
+  $("camp-meta").innerHTML = `<span>${c.signals} ${c.auto ? "signal" : "fréquence"}${c.signals > 1 ? "s" : ""} suivi${c.auto && c.signals > 1 ? "s" : ""} · ${simul ? `${c.devices.length} SDR${c.alignment_ms ? `, écart entre SDR ${NF1.format(c.alignment_ms.p50)} ms (99 % < ${NF1.format(c.alignment_ms.p99)} ms)` : ""}` : `commutation ${c.rate_hz} Hz`}</span>
     <span>${Math.round(done * 100)} % · ${duration(now - c.start_ms)} écoulées, reste ${duration(c.planned_end_ms - now)}</span>
     <span>Fin prévue ${fmtWhen.format(c.planned_end_ms)}</span>`;
 }

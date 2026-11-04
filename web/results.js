@@ -556,6 +556,16 @@ function renderStatic() {
       const mg = (c.margins || {})[v.class];
       return `<li>${icon[v.state] || ICON.dash}<span>${CLASS_TITLE[v.class] || v.class}${v.useful != null ? ` : temps utile ${Math.round(v.useful * 100)} %` : ""}</span><span class="m">${mg != null ? `±${f1(mg)} dB` : "—"}</span></li>`;
     }).join("");
+  } else if (q && q.kind === "aa") {
+    // Mode simultané : l'étalonnage de l'ensemble de SDR par une campagne A/A.
+    const fmtDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+    const al = q.alignment_ms, lt = c.load_test;
+    $("d-qual").textContent = `Étalonnage A/A${q.date_ms ? ` du ${fmtDate.format(q.date_ms)}` : ""} : une antenne sur tous les SDR via un splitter ; l'écart de gain de chaque SDR est corrigé, fréquence par fréquence.${al ? ` Écart temporel entre SDR : ${f1(al.p50)} ms en médiane, ${f1(al.p99)} ms au 99e centile.` : ""}${lt && lt.station_load != null ? ` Test de charge avant lancement : ${Math.round(lt.station_load * 100)} % de la machine.` : ""}`;
+    const icon = { ok: ICON.check, warn: ICON.warn, bad: ICON.warn };
+    $("qual-list").innerHTML = (q.verdicts || []).map((v) => {
+      const mg = (c.margins || {})[v.class];
+      return `<li>${icon[v.state] || ICON.dash}<span>${CLASS_TITLE[v.class] || v.class}${v.state === "warn" ? " : SDR mal alignés pour la voix" : ""}</span><span class="m">${mg != null ? `±${f1(mg)} dB` : "—"}</span></li>`;
+    }).join("");
   } else if (q) {
     $("d-qual").textContent = `Campagne A/A du ${q.date}, ${q.duration}, une antenne sur toutes les voies via un splitter. Biais résiduel ${q.bias}, alignement temporel ${NF1.format(q.alignment_ms)} ms.`;
     $("qual-list").innerHTML = `

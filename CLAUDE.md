@@ -49,7 +49,7 @@ Pièges Windows : PowerShell 5.1 écrit en UTF-8 avec BOM (`Set-Content`, `Out-F
 | P2 Qualification | Banc matériel livré (D12), en attente de test sur le RSP2 Pro ; campagne A/A livrée en P3 |
 | P3 Mode commuté, fréquences imposées | Livré avec le simulateur (D13), en attente de test sur le RSP2 Pro |
 | P4 Bande automatique | Livré avec le simulateur (D15), en attente de test sur le RSP2 Pro |
-| P5 Mode simultané | À faire |
+| P5 Mode simultané | Livré avec le simulateur (D16), en attente de test sur plusieurs SDR réels |
 | P6 Résultats locaux | En partie (D11) : démonstration, liste, page de résultats sur l'API |
 | P7 WordPress | À faire |
 | P8 RTL-SDR V4 et Airspy HF+ | À faire |

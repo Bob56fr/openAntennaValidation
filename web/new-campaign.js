@@ -1,6 +1,7 @@
 "use strict";
 
-/* Assistant de nouvelle campagne (mode commuté, fréquences imposées). */
+/* Assistant de nouvelle campagne : réception commutée ou simultanée, fréquences imposées ou
+   bande automatique. */
 
 const $ = (id) => document.getElementById(id);
 const NF1 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -15,6 +16,11 @@ const ICON = {
 let setup = null;
 let freqs = [];
 let mode = "fixed";
+let reception = "switched";
+// Mode simultané : SDR retenus (numéro de série, antenne), étalonnages de l'ensemble, test de charge.
+let sim = [];
+let simProfiles = null;
+let loadTimer = null;
 
 async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -44,9 +50,80 @@ function autoRange() {
 
 function selected() { return freqs.filter((f) => Number(f.khz) > 0).map((f) => ({ hz: Number(f.khz) * 1000, w: widthOf(f), class: f.class })); }
 
+const running = () => (setup.receiver.devices || []).filter((d) => d.state === "running");
+const used = () => sim.filter((c) => c.use);
+// Bande utile : celle du SDR (commuté), la plus étroite des SDR retenus (simultané).
+function usableBw() {
+  if (reception === "switched") return setup.receiver.bandwidth_hz || 0;
+  const bws = used().map((c) => (running().find((d) => d.serial === c.serial) || {}).bandwidth_hz || 0);
+  return bws.length ? Math.min(...bws) : 0;
+}
+
+function renderSdrs() {
+  const opts = (sel) => setup.antennas.map((a) => `<option value="${a.id}"${a.id === sel ? " selected" : ""}>${esc(a.name)} (${esc(a.type_label)})</option>`).join("");
+  const aa = $("aa").checked;
+  $("sdrs").innerHTML = `<div class="sdr-row head"><span></span><span>SDR</span><span class="in">Entrée</span><span>Antenne</span></div>` +
+    sim.map((c, i) => {
+      const d = running().find((x) => x.serial === c.serial) || {};
+      return `<div class="sdr-row${c.use ? "" : " off"}" data-i="${i}"><input type="checkbox" data-k="use"${c.use ? " checked" : ""} aria-label="Utiliser ce SDR">
+        <span>${esc(d.model || "SDR")} <span class="mono">n° ${esc(c.serial)}</span></span><span class="in mono">${esc(d.input || "—")}</span>
+        <select data-k="antenna" aria-label="Antenne de ce SDR"${!c.use || (aa && used()[0] !== c) ? " disabled" : ""}>${opts(c.antenna)}</select></div>`;
+    }).join("");
+  const keep = $("sim-ref").value;
+  $("sim-ref").innerHTML = used().map((c, k) => `<option value="${k}">${esc(c.serial)} : ${esc((setup.antennas.find((a) => a.id === c.antenna) || {}).name || "")}</option>`).join("");
+  if (keep && Number(keep) < used().length) $("sim-ref").value = keep;
+}
+
+async function loadProfiles() {
+  simProfiles = null;
+  const serials = used().map((c) => c.serial);
+  if (reception === "simultaneous" && serials.length >= 2) {
+    try { simProfiles = await api(`/api/campaign/profiles?serials=${encodeURIComponent(serials.join(","))}`); } catch (e) { showError(e.message); }
+  }
+  update();
+}
+
+function renderLoad(t) {
+  const serials = used().map((c) => c.serial);
+  const valid = t && t.state === "done" && Date.now() - t.ended_ms < 3600_000 && serials.every((s) => t.serials.includes(s));
+  $("load-accept-row").hidden = !(valid && t.verdict === "limit");
+  if (t && t.state === "running") {
+    $("load-state").innerHTML = `Test en cours sur ${t.serials.length} SDR (${NF0.format(t.seconds)} s)…`;
+    $("load-go").disabled = true;
+    return;
+  }
+  $("load-go").disabled = serials.length < 2;
+  if (!valid) {
+    $("load-state").innerHTML = `${ICON.warn} Test de charge à faire avant le lancement : chaque SDR mesure ${setup.max_signals} signaux pendant ${NF0.format(setup.load_test_s)} s, et le programme vérifie que l'ordinateur suit.`;
+    return;
+  }
+  const icon = { ok: ICON.ok, limit: ICON.warn, refuse: ICON.bad }[t.verdict];
+  const detail = Object.entries(t.loads).map(([s, v]) => `${esc(s)} ${v == null ? "—" : `${Math.round(v * 100)} %`}`).join(", ");
+  $("load-state").innerHTML = `${icon} ${esc(t.message)} <span style="font-family:var(--font-mono);font-size:12.5px">(${detail} ; ${t.cores} cœurs)</span>`;
+}
+
+async function pollLoad() {
+  clearTimeout(loadTimer);
+  try {
+    const { load_test: t } = await api("/api/campaign/loadtest");
+    setup.receiver.load_test = t;
+    renderLoad(t);
+    if (t && t.state === "running") loadTimer = setTimeout(pollLoad, 1000);
+  } catch (e) { showError(e.message); }
+}
+
 function update() {
   const rx = setup.receiver;
-  const bw = rx.bandwidth_hz || 0;
+  const bw = usableBw();
+  const simul = reception === "simultaneous";
+  document.querySelectorAll("#reception button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === reception)));
+  $("eyebrow").textContent = simul ? "Campagne · réception simultanée" : "Campagne · réception commutée";
+  $("sw-ants").hidden = simul; $("sim-ants").hidden = !simul;
+  $("rate-ctl").hidden = simul; $("load-block").hidden = !simul;
+  $("aa-label").textContent = simul
+    ? "Campagne A/A : la même antenne sur tous les SDR, par un splitter. L'écart vrai est nul : la campagne étalonne l'ensemble (correction de gain de chaque SDR et marges par classe de signal)."
+    : "Campagne A/A : la même antenne sur les deux entrées, par un splitter. L'écart vrai est nul ; ce qui reste mesure l'erreur de la méthode et donne les marges par classe de signal au profil de qualification.";
+  if (simul) renderLoad(rx.load_test);
   const list = selected();
   const cov = $("coverage");
   $("auto-fields").hidden = mode !== "auto";
@@ -83,23 +160,37 @@ function update() {
   const win = (setup.windows.find(([h]) => dur / 3600 <= h) || setup.windows[setup.windows.length - 1])[1];
   const period = Math.min(setup.period_s, win / 3);
   const n = mode === "auto" ? (Number($("nmax").value) || setup.max_signals) + 1 : Math.max(1, list.length);
-  const volume = (dur / period) * n * 2 * 90 + (dur / win) * n * 3 * 260;
+  const nch = simul ? Math.max(2, used().length) : 2;
+  const volume = (dur / period) * n * nch * 90 + (dur / win) * n * (nch + 1) * 260;
+  const need = Math.max(volume * 1.2, volume + 2 ** 30);
   const rate = Number($("rate").value) || setup.rate_hz;
   $("plan").innerHTML = `<dt>Fenêtre d'agrégation</dt><dd>${win >= 60 ? `${win / 60} min` : `${win} s`}</dd>
-    <dt>Une mesure par signal et par entrée toutes les</dt><dd>${NF1.format(period).replace(",0", "")} s</dd>
-    <dt>Durée sur chaque entrée</dt><dd>${NF1.format(1000 / (2 * rate))} ms à ${rate} Hz</dd>
-    <dt>Volume estimé</dt><dd>${bytes(volume)} (${bytes(setup.disk_free_bytes)} libres)</dd>`;
+    <dt>Une mesure par signal et par ${simul ? "SDR" : "entrée"} toutes les</dt><dd>${NF1.format(period).replace(",0", "")} s</dd>
+    ${simul ? `<dt>Réception</dt><dd>${nch} SDR en parallèle, sans commutation</dd>` : `<dt>Durée sur chaque entrée</dt><dd>${NF1.format(1000 / (2 * rate))} ms à ${rate} Hz</dd>`}
+    <dt>Volume estimé</dt><dd>${bytes(volume)} (${bytes(setup.disk_free_bytes)} libres${setup.disk_free_bytes < need ? ` : <b style="color:var(--crit-ink)">espace insuffisant</b>` : ""})</dd>`;
   const aa = $("aa").checked;
   $("ant-b").disabled = aa;
   if (aa) $("ant-b").value = $("ant-a").value;
-  $("ant-note").textContent = aa ? "Branchez la même antenne sur A et B par un splitter et deux câbles identiques." : "";
+  $("ant-note").textContent = !aa ? "" : simul
+    ? "Branchez la même antenne sur tous les SDR par un splitter et des câbles identiques."
+    : "Branchez la même antenne sur A et B par un splitter et deux câbles identiques.";
 }
 
 function renderQual(center) {
   const band = center ? (setup.bands.find((b) => b.low_hz <= center && center <= b.high_hz) || {}).name : null;
-  const p = band ? setup.profiles[band] : null;
+  const simul = reception === "simultaneous";
+  const p = band ? (simul ? (simProfiles || {})[band] : setup.profiles[band]) : null;
   $("accept-row").hidden = !p;
   if (!center) { $("qual").innerHTML = ""; return; }
+  if (simul) {
+    if (!p) {
+      $("qual").innerHTML = `<p class="note">${ICON.warn} Aucun étalonnage de cet ensemble de SDR${band ? ` sur ${band}` : ""}, dans cet ordre. ${$("aa").checked ? "Cette campagne A/A le produira." : "Les écarts de gain entre SDR ne seront pas corrigés et la campagne sera marquée « non qualifiée » : faites d'abord une campagne A/A (même antenne sur tous les SDR)."}</p>`;
+      return;
+    }
+    const verd = p.verdicts.map((v) => `<span>${ICON[v.state] || ""}${esc(v.label)}${v.margin_db != null ? ` : ±${NF1.format(v.margin_db)} dB` : ""}</span>`).join("");
+    $("qual").innerHTML = `<p class="note">Étalonnage A/A de ces SDR sur ${esc(band)} : correction de gain de chaque SDR et marges par classe.</p><div class="verd">${verd}</div>`;
+    return;
+  }
   if (!p) {
     $("qual").innerHTML = `<p class="note">${ICON.warn} Aucun profil de qualification pour ce SDR${band ? ` sur ${band}` : ""}. La campagne utilisera une neutralisation prudente de ${NF1.format(setup.default_blanking_ms)} ms après chaque bascule, et sera marquée « non qualifiée » : aucun écart ne sera affirmé sans marge connue. <a href="/qualification">Qualifier le SDR</a>.</p>`;
     return;
@@ -135,6 +226,31 @@ function fillRange(b) {
   $("fmin").value = (lo / 1000).toFixed(1); $("fmax").value = (hi / 1000).toFixed(1);
 }
 $("mode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { mode = b.dataset.v; update(); } });
+$("reception").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b || b.disabled) return;
+  reception = b.dataset.v;
+  checkBlockers(); renderSdrs(); loadProfiles();
+});
+$("sdrs").addEventListener("input", (e) => {
+  const row = e.target.closest(".sdr-row"); if (!row || row.dataset.i === undefined) return;
+  const c = sim[+row.dataset.i];
+  if (e.target.dataset.k === "use") c.use = e.target.checked; else c.antenna = Number(e.target.value);
+  if ($("aa").checked && used().length) used().forEach((x) => { x.antenna = used()[0].antenna; });
+  renderSdrs(); loadProfiles();
+});
+$("aa").addEventListener("input", () => {
+  if ($("aa").checked && used().length) used().forEach((x) => { x.antenna = used()[0].antenna; });
+  renderSdrs(); update();
+});
+$("load-go").addEventListener("click", async () => {
+  showError("");
+  try {
+    const t = await api("/api/campaign/loadtest", { serials: used().map((c) => c.serial) });
+    setup.receiver.load_test = t; renderLoad(t);
+    loadTimer = setTimeout(pollLoad, 1000);
+  } catch (e) { showError(e.message); }
+});
 ["fmin", "fmax", "nmax"].forEach((id) => $(id).addEventListener("input", update));
 ["dur", "unit", "rate", "aa", "ant-a"].forEach((id) => $(id).addEventListener("input", update));
 
@@ -147,9 +263,14 @@ $("form").addEventListener("submit", async (e) => {
     low_hz: mode === "auto" && r ? r.lo : null, high_hz: mode === "auto" && r ? r.hi : null,
     max_signals: Number($("nmax").value) || null,
     frequencies: mode === "auto" ? [] : selected().map((f, i) => ({ freq_hz: f.hz, class: f.class, width_hz: Number(freqs.filter((x) => Number(x.khz) > 0)[i].width_hz) || null })),
-    channels: [{ antenna_id: Number($("ant-a").value) }, { antenna_id: Number(aa ? $("ant-a").value : $("ant-b").value) }],
-    reference: Number($("ref").value), duration_s: Number($("dur").value) * Number($("unit").value),
-    rate_hz: Number($("rate").value) || null, aa, accept_limits: $("accept").checked,
+    reception,
+    channels: reception === "simultaneous"
+      ? used().map((c) => ({ antenna_id: c.antenna, serial: c.serial }))
+      : [{ antenna_id: Number($("ant-a").value) }, { antenna_id: Number(aa ? $("ant-a").value : $("ant-b").value) }],
+    reference: Number(reception === "simultaneous" ? $("sim-ref").value : $("ref").value),
+    duration_s: Number($("dur").value) * Number($("unit").value),
+    rate_hz: reception === "simultaneous" ? null : Number($("rate").value) || null, aa,
+    accept_limits: $("accept").checked, accept_load: $("load-accept").checked,
   };
   try {
     $("go").disabled = true;
@@ -163,13 +284,14 @@ $("form").addEventListener("submit", async (e) => {
     setup = await api("/api/campaign/setup");
     const rx = setup.receiver;
     $("meta").innerHTML = rx.device ? `<span><b>${esc(rx.device.model)}</b> n° ${esc(rx.device.serial)}</span><span>Entrées ${(rx.antennas || []).join(", ")}</span><span>Bande utile ${NF0.format((rx.bandwidth_hz || 0) / 1000)} kHz</span>` : "";
-    const blockers = [];
-    if (setup.campaign) blockers.push(`Une campagne est déjà en cours : <a href="/campaign?id=${setup.campaign.uuid}">${esc(setup.campaign.title)}</a>.`);
-    if (rx.state !== "running") blockers.push("Le récepteur n'est pas en marche : branchez le SDR pour lancer une campagne.");
-    if ((rx.antennas || []).length < 2 && rx.state === "running") blockers.push("Ce SDR n'a qu'une entrée : le mode commuté demande un SDR à plusieurs entrées.");
-    if (setup.antennas.length < 1) blockers.push(`Votre catalogue d'antennes est vide : <a href="/installation">décrivez vos antennes</a> d'abord.`);
-    $("blocker").hidden = !blockers.length; $("blocker").innerHTML = blockers.join("<br>");
-    $("go").disabled = blockers.length > 0;
+    const many = running().length >= 2;
+    $("reception").querySelector('[data-v="simultaneous"]').disabled = !many;
+    $("rx-note").textContent = many
+      ? `${running().length} SDR en marche. En réception simultanée, chaque antenne a son SDR : pas de commutation, toutes les classes de signal sont mesurables, mais les SDR doivent être étalonnés ensemble (campagne A/A) et l'ordinateur doit suivre (test de charge).`
+      : "Un seul SDR en marche : la réception simultanée demande un SDR par antenne (liste « others » de la section [hardware] de la configuration).";
+    if (many && ((rx.antennas || []).length < 2 || new URLSearchParams(location.search).get("reception") === "simultaneous")) reception = "simultaneous";
+    sim = running().map((d, i) => ({ serial: d.serial, use: true, antenna: (setup.antennas[i] || setup.antennas[0] || {}).id }));
+    checkBlockers();
     const opts = setup.antennas.map((a) => `<option value="${a.id}">${esc(a.name)} (${esc(a.type_label)})</option>`).join("");
     $("ant-a").innerHTML = opts; $("ant-b").innerHTML = opts;
     if (setup.antennas.length > 1) $("ant-b").selectedIndex = 1;
@@ -180,6 +302,21 @@ $("form").addEventListener("submit", async (e) => {
     if (band) { $("band").value = band.name; fillRange(band); }
     $("nmax").value = setup.max_signals;
     freqs = [{ khz: (center / 1000).toFixed(1), class: "carrier" }];
+    renderSdrs();
     renderFreqs();
+    loadProfiles();
   } catch (e) { showError(e.message); }
 })();
+
+function checkBlockers() {
+  const rx = setup.receiver;
+  const blockers = [];
+  if (setup.campaign) blockers.push(`Une campagne est déjà en cours : <a href="/campaign?id=${setup.campaign.uuid}">${esc(setup.campaign.title)}</a>.`);
+  if (reception === "switched") {
+    if (rx.state !== "running") blockers.push("Le récepteur n'est pas en marche : branchez le SDR pour lancer une campagne.");
+    if ((rx.antennas || []).length < 2 && rx.state === "running") blockers.push("Ce SDR n'a qu'une entrée : le mode commuté demande un SDR à plusieurs entrées.");
+  } else if (running().length < 2) blockers.push("La réception simultanée demande au moins deux SDR en marche.");
+  if (setup.antennas.length < 1) blockers.push(`Votre catalogue d'antennes est vide : <a href="/installation">décrivez vos antennes</a> d'abord.`);
+  $("blocker").hidden = !blockers.length; $("blocker").innerHTML = blockers.join("<br>");
+  $("go").disabled = blockers.length > 0;
+}

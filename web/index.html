@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tableau de bord · openAntennaValidation</title>
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/results.css">
   <script src="/static/theme.js"></script>
 </head>
 <body>
@@ -61,6 +62,11 @@
           <button class="linkbtn" type="button" id="camp-stop-no">Continuer la campagne</button>
         </div>
       </div>
+    </section>
+
+    <section id="devices-sec" hidden>
+      <div class="sec-head"><h2>SDR de la station</h2><p>Réception simultanée : un SDR par antenne. Le spectre et les commandes ci-dessous concernent le SDR principal.</p></div>
+      <div class="card tbl-wrap"><table id="devices"></table></div>
     </section>
 
     <section>

@@ -273,7 +273,9 @@ def _create(db: Database, cfg: Config, request: dict[str, Any], sdrs: list[dict[
             "date_ms": profile["ended_ms"],
             "blanking_ms": profile["blanking_ms"], "useful": profile["useful_fraction"],
             "verdicts": margins_json.get("verdicts", []),
-            "aa_campaign": margins_json.get("aa_campaign")},
+            "aa_campaign": margins_json.get("aa_campaign"),
+            "alignment_ms": correction.get("alignment_ms")},
+        "load_test": request.get("load_test"),
         "volume_bytes": volume,
         "antennas": [],
     }
@@ -351,6 +353,9 @@ class Running:
     # Wall time of each period start, per channel, until every channel has reported it.
     walls: dict[int, dict[int, float]] = field(default_factory=dict)
     align_ms: list[float] = field(default_factory=list)
+    # Clock drift between SDRs: periods in a row beyond half the tolerance; resync asked.
+    drift_count: int = 0
+    resync: bool = False
 
     @property
     def simultaneous(self) -> bool:
@@ -422,6 +427,7 @@ def engine_spec(run: Running, cfg: Config, channel: int = 0,
     inputs = [p["inputs"][channel]] if run.simultaneous else p["inputs"]
     return {
         "campaign": run.uuid, "inputs": inputs, "channel_base": channel if run.simultaneous else 0,
+        "align": run.simultaneous,
         "rate_hz": p["rate_hz"],
         "blanking_ms": p["blanking_ms"], "fft_size": cfg.spectrum.fft_size,
         "period_s": period, "start_ms": start, "clip_threshold": cfg.spectrum.clip_threshold,
@@ -553,6 +559,13 @@ def _alignment(db: Database, cfg: Config, run: Running, ts: int, channel: int,
     del run.walls[ts]
     run.align_ms.append(round(spread, 2))
     run.align_ms = run.align_ms[-2000:]
+    # The sample clocks of the SDRs drift apart (1 ppm: 86 ms a day): restart them all on a
+    # common instant before the spread reaches the tolerance.
+    run.drift_count = run.drift_count + 1 \
+        if spread > cfg.campaign.align_tolerance_ms / 2 else 0
+    if run.drift_count >= 3:
+        run.drift_count = 0
+        run.resync = True
     if spread > cfg.campaign.align_tolerance_ms:
         voices = [s["id"] for s in run.signals if s["class"] in VOICE]
         if voices:

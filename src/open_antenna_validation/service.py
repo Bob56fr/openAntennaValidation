@@ -45,6 +45,8 @@ RESTART_DELAY_S = 5.0
 RESTART_MAX_S = 60.0
 # A load test stays valid this long for launching a simultaneous campaign.
 LOAD_VALID_MS = 3_600_000
+# Simultaneous mode: the common start instant leaves this time for the commands to arrive.
+ALIGN_LEAD_MS = 500
 
 
 @dataclass
@@ -267,7 +269,7 @@ class Station:
         if not run.simultaneous:
             self._send("campaign_start", cm.engine_spec(run, self.config))
             return
-        start = cm.engine_start_ms(run)
+        start = max(cm.engine_start_ms(run), now_ms() + ALIGN_LEAD_MS)
         for k, serial in enumerate(run.devices):
             self._send_to(serial, "campaign_start", cm.engine_spec(run, self.config, k, start))
 
@@ -321,6 +323,10 @@ class Station:
                 raise cm.CampaignError("Le test de charge est en cours.")
             if request.get("reception") == "simultaneous":
                 self._check_load(request)
+                load = self.load_test or {}
+                request = {**request, "load_test": {
+                    k: load.get(k) for k in ("verdict", "message", "loads", "station_load",
+                                             "cores", "ended_ms")}}
             free = shutil.disk_usage(self.db.path.parent).free
             uuid = cm.create_campaign(self.db, self.config, self.receiver, request,
                                       devices=self.devices_report(), free_bytes=free)
@@ -368,6 +374,11 @@ class Station:
                 ts - run.last_survey_ms >= 1000 * (self.config.campaign.calm_probe_s if run.calm
                                                    else self.config.campaign.reevaluate_s)):
                 self._start_survey()
+            elif run.resync and self._ready(run):
+                run.resync = False
+                self.db.log_event("resync", {"campaign": run.uuid,
+                                             "alignment_ms": run.align_ms[-3:]})
+                self._start_engines(run)
             elif run.calm != calm_before and self._ready(run):
                 # Calm band: slower measurements (and back to normal when it wakes up).
                 self._start_engines(run)
