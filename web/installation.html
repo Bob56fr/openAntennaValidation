@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Installation · openAntennaValidation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/results.css">
+  <script src="/static/theme.js"></script>
+  <style>
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
+    @media (max-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+    .ant { cursor: pointer; }
+    .ant[aria-current="true"] { box-shadow: inset 0 0 0 2px var(--ink); }
+    .form { display: grid; gap: 12px; }
+    .frow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+    @media (max-width: 560px) { .frow { grid-template-columns: minmax(0, 1fr); } }
+    .form input, .form select { width: 100%; }
+    .chain-row { display: grid; grid-template-columns: 1.2fr 1.3fr 0.8fr 0.8fr 0.7fr auto; gap: 6px; align-items: center; }
+    .chain-row .loss { font-family: var(--font-mono); font-size: 13px; text-align: right; color: var(--ink-2); }
+    @media (max-width: 700px) { .chain-row { grid-template-columns: 1fr 1fr; } }
+    .chain-head { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-family: var(--font-cond); font-weight: 600; }
+    .total { display: flex; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 8px; font-size: 14px; }
+    .total b { font-family: var(--font-mono); }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .ok-note { color: var(--good-ink); font-size: 13.5px; }
+    .empty { color: var(--muted); font-size: 14px; padding: 10px 0; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M2 15 Q6 4 11 11 T20 7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/><path d="M2 18 Q7 9 11 14 T20 12" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linecap="round"/></svg>openAntennaValidation</div>
+      <nav class="tabs" aria-label="Station">
+        <a href="/">Tableau de bord</a>
+        <a href="/campaigns">Campagnes</a>
+        <a href="/qualification">Qualification</a>
+        <a href="/installation" aria-current="page">Installation</a>
+      </nav>
+      <div class="right"><button class="linkbtn" type="button" onclick="toggleTheme()">Thème</button></div>
+    </div>
+  </header>
+  <div class="wrap head">
+    <div class="eyebrow">Station</div>
+    <div class="head-row"><h1>Installation</h1><button class="btn primary" id="btn-add" type="button">Ajouter une antenne</button></div>
+    <div class="meta">Catalogue de vos antennes et de leurs chaînes de réception, réutilisé d'une campagne à l'autre. Les pertes servent à la vue « Antenne » des résultats.</div>
+  </div>
+  <main class="wrap">
+    <div class="banner error" id="error" hidden></div>
+    <div class="banner warn" id="cables-warn" hidden>Les pertes du catalogue de câbles sont des valeurs typiques de fiches techniques, à vérifier : si vous connaissez la perte réelle d'un câble, saisissez-la dans la colonne « Perte ».</div>
+    <div class="layout">
+      <section>
+        <div class="sec-head"><h2>Antennes</h2><p id="count"></p></div>
+        <div class="ants" id="ants" style="grid-template-columns:minmax(0,1fr)"></div>
+      </section>
+      <section>
+        <div class="sec-head"><h2 id="form-title">Nouvelle antenne</h2></div>
+        <form class="card form" id="form" autocomplete="off">
+          <div class="frow">
+            <div class="ctl"><label class="eyebrow" for="f-name">Nom</label><input id="f-name" type="text" required placeholder="ex. Dipôle 40 m du jardin"></div>
+            <div class="ctl"><label class="eyebrow" for="f-type">Type</label><select id="f-type"></select></div>
+            <div class="ctl"><label class="eyebrow" for="f-model">Modèle ou description</label><input id="f-model" type="text"></div>
+            <div class="ctl"><label class="eyebrow" for="f-pol">Polarisation</label><select id="f-pol"></select></div>
+            <div class="ctl"><label class="eyebrow" for="f-height">Hauteur (m)</label><input id="f-height" type="number" step="0.1" min="0" max="300"></div>
+            <div class="ctl"><label class="eyebrow" for="f-height-note">Précision sur la hauteur</label><input id="f-height-note" type="text" placeholder="ex. sommet à 12 m"></div>
+            <div class="ctl"><label class="eyebrow" for="f-az">Azimut de l'axe principal (°)</label><input id="f-az" type="number" step="1" min="0" max="359" placeholder="antenne directive"></div>
+            <div class="ctl"><label class="eyebrow" for="f-orient">Orientation</label><input id="f-orient" type="text" placeholder="ex. axe 110° / 290°"></div>
+          </div>
+          <div class="ctl"><label class="eyebrow" for="f-bands">Bandes prévues</label><input id="f-bands" type="text" placeholder="ex. 40 m, 30 m"></div>
+
+          <div class="sec-head" style="margin-top:6px"><h2 style="font-size:17px">Chaîne de réception</h2><p id="chain-sub"></p></div>
+          <div class="chain-row chain-head"><span>Maillon</span><span>Câble</span><span>Longueur (m)</span><span>Perte (dB)</span><span style="text-align:right">Calculée</span><span></span></div>
+          <div id="chain"></div>
+          <div class="actions"><button class="btn ghost" id="btn-el" type="button">Ajouter un maillon</button></div>
+          <div class="total"><span>Perte totale de la chaîne</span><b id="total">—</b></div>
+          <p class="desc">Perte positive, gain négatif (préampli). Pour un coaxial, choisissez le câble et sa longueur ; une perte saisie remplace la valeur calculée.</p>
+          <div class="actions">
+            <button class="btn primary" type="submit" id="btn-save">Enregistrer</button>
+            <button class="btn ghost" type="button" id="btn-archive" hidden>Retirer du catalogue</button>
+            <span class="ok-note" id="saved" hidden>Enregistré.</span>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+  <footer><div class="wrap">openAntennaValidation, logiciel libre (GPLv3).</div></footer>
+  <script src="/static/installation.js"></script>
+</body>
+</html>

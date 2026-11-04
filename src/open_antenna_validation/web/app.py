@@ -24,7 +24,7 @@ from open_antenna_validation.campaigns import CampaignNotFound, campaign_results
 from open_antenna_validation.config import Antenna
 from open_antenna_validation.hardware import HardwareError
 from open_antenna_validation.service import TOPIC_SPECTRUM, TOPIC_STATUS, Station
-from open_antenna_validation.web import qualification_routes
+from open_antenna_validation.web import installation_routes, qualification_routes
 from open_antenna_validation.web.auth import (
     SESSION_KEY,
     is_authenticated,
@@ -113,6 +113,10 @@ def create_app(station: Station, *, run_lifecycle: bool = True) -> FastAPI:
     @app.get("/campaign", include_in_schema=False)
     def campaign_page(request: Request) -> Response:
         return page(request, "campaign.html")
+
+    @app.get("/installation", include_in_schema=False)
+    def installation_page(request: Request) -> Response:
+        return page(request, "installation.html")
 
     @app.get("/qualification", include_in_schema=False)
     def qualification_page(request: Request) -> Response:
@@ -213,5 +217,6 @@ def create_app(station: Station, *, run_lifecycle: bool = True) -> FastAPI:
         await stream(websocket, TOPIC_STATUS, station.hardware_report())
 
     app.include_router(qualification_routes.build_router(station))
+    app.include_router(installation_routes.build_router(station))
     app.mount("/static", StaticFiles(directory=root), name="static")
     return app

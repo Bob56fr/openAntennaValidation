@@ -10,16 +10,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from open_antenna_validation.installation import (
+    ANTENNA_TYPES,
+    POLARIZATIONS,
+    chain_elements,
+    element_loss_db,
+)
 from open_antenna_validation.storage import Database
 
-ANTENNA_TYPES = {
-    "dipole": "Dipôle", "inverted_v": "V inversé", "vertical_quarter": "Verticale ¼ λ",
-    "vertical_radials": "Verticale avec radians", "efhw": "EFHW", "long_wire": "Long fil",
-    "delta_loop": "Delta loop", "quad": "Quad", "magnetic_loop": "Boucle magnétique",
-    "yagi": "Yagi", "moxon": "Moxon", "active_loop": "Boucle active", "mini_whip": "Mini-whip",
-    "beverage": "Beverage", "other": "Autre",
-}
-POLARIZATIONS = {"horizontal": "Horizontale", "vertical": "Verticale", "mixed": "Mixte"}
 LETTERS = "ABCDEFGHIJ"
 
 
@@ -56,17 +54,20 @@ def list_campaigns(db: Database, *, show_demo: bool = True) -> list[dict[str, An
     return items
 
 
-def _chain_losses(db: Database, chain_id: int | None, band: str) -> dict[str, Any]:
+def _chain_losses(db: Database, chain_id: int | None, band: str, freq_hz: float) -> dict[str, Any]:
+    """Losses of a chain at the campaign centre frequency (per-band values first)."""
     if chain_id is None:
         return {"elements": [], "loss_db": 0.0}
     elements = []
-    for e in db.query(
-        "SELECT kind, label, db_json FROM chain_elements WHERE chain_id = ? ORDER BY position",
-        (chain_id,),
+    for row, e in zip(
+        db.query("SELECT db_json FROM chain_elements WHERE chain_id = ? ORDER BY position",
+                 (chain_id,)),
+        chain_elements(db, chain_id), strict=True,
     ):
-        value = json.loads(e["db_json"] or "{}").get(band)
-        elements.append({"kind": e["kind"], "label": e["label"], "db": value})
-    return {"elements": elements, "loss_db": round(sum(x["db"] or 0.0 for x in elements), 2)}
+        per_band = json.loads(row["db_json"] or "{}").get(band)
+        value = per_band if per_band is not None else element_loss_db(e, freq_hz)
+        elements.append({"kind": e["kind"], "label": e["label"], "db": round(value, 2)})
+    return {"elements": elements, "loss_db": round(sum(x["db"] for x in elements), 2)}
 
 
 def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
@@ -102,7 +103,9 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
         chains = json.loads(s["config_json"] or "{}").get("chains", [])
         segments.append({
             "idx": s["idx"], "start_ms": s["start_ms"], "end_ms": s["end_ms"],
-            "reason": s["reason"], "chains": [_chain_losses(db, x, c["band"]) for x in chains],
+            "reason": s["reason"],
+            "chains": [_chain_losses(db, x, c["band"], (c["low_hz"] + c["high_hz"]) / 2)
+                       for x in chains],
         })
 
     windows = db.query(
