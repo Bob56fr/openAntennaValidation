@@ -3,7 +3,7 @@
  * Plugin Name:       openAntennaValidation
  * Plugin URI:        https://github.com/Bob56fr/openAntennaValidation
  * Description:       Publie les campagnes de comparaison d'antennes HF des stations openAntennaValidation : plusieurs opérateurs, liste filtrée, page de résultats, état des stations.
- * Version:           0.2.0
+ * Version:           0.2.1
  * Requires at least: 6.0
  * Requires PHP:      8.0
  * Author:            openAntennaValidation
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('OAV_VERSION', '0.2.0');
+define('OAV_VERSION', '0.2.1');
 define('OAV_DB_VERSION', 1);
 define('OAV_FILE', __FILE__);
 define('OAV_DIR', plugin_dir_path(__FILE__));

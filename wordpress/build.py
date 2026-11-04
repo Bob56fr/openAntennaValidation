@@ -110,6 +110,16 @@ def demos(out: Path) -> list[dict[str, object]]:
     return items
 
 
+IMAGE = re.compile(r"^!\[[^\]]*\]\(([^)\s]+)\)$", re.MULTILINE)
+IMAGE_PATH = re.compile(r"^[a-z0-9_-]+(?:/[a-z0-9_-]+)*\.(?:svg|png)$")  # as in the plugin
+
+
+def presentation_images() -> list[str]:
+    """Images of docs/presentation.md (lines ``![text](path)``), paths relative to docs/."""
+    text = (ROOT / "docs" / "presentation.md").read_text(encoding="utf-8")
+    return IMAGE.findall(text)
+
+
 def build() -> Path:
     assets = PLUGIN / "assets"
     shared, vendor, demo = assets / "shared", assets / "vendor", assets / "demo"
@@ -132,6 +142,12 @@ def build() -> Path:
     (templates / "campaign-view.html").write_text(campaign_view(), encoding="utf-8")
     # Copy of the presentation shipped with the plugin, for when GitHub does not answer.
     shutil.copy2(ROOT / "docs" / "presentation.md", assets / "presentation.md")
+    docs = assets / "docs"
+    if docs.exists():
+        shutil.rmtree(docs)
+    for image in presentation_images():
+        (docs / image).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / "docs" / image, docs / image)
     items = demos(demo)
     from open_antenna_validation.installation import ANTENNA_TYPES
     (assets / "antenna-types.json").write_text(json.dumps(ANTENNA_TYPES, ensure_ascii=False),

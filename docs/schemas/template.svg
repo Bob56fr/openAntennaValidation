@@ -1,0 +1,373 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 2030" width="1400" height="2030" role="img" aria-labelledby="title desc">
+  <title id="title">openAntennaValidation : principes de mesure</title>
+  <desc id="desc">Schéma en quatre parties : réception commutée et réception simultanée ; mesure du niveau, du plancher de bruit et du SNR dans la largeur de chaque classe de signal ; qualification par banc matériel et campagne A/A ; chaîne statistique jusqu'à la règle de conclusion.</desc>
+  <style>
+    svg { --bg:#f2f3f0; --surface:#fcfcfb; --surface-2:#f6f7f4; --ink:#121512; --ink-2:#4b514c; --muted:#7d837d;
+          --line:#e1e2dc; --axis:#c3c5bd; --zone:rgba(125,131,125,.14);
+          --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --good-ink:#006300;
+          --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s7:#6250d6; }
+    @media (prefers-color-scheme: dark) {
+      svg { --bg:#0e100e; --surface:#181a18; --surface-2:#1e211e; --ink:#eef0ec; --ink-2:#c0c4bc; --muted:#8a8e88;
+            --line:#2b2e2b; --axis:#3b3e3a; --zone:rgba(138,142,136,.16); --good-ink:#3cc23c;
+            --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s7:#9085e9; }
+    }
+    text { font-family: "IBM Plex Sans", system-ui, "Segoe UI", sans-serif; fill: var(--ink); }
+    .bg { fill: var(--bg); }
+    .panel { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+    .box { fill: var(--surface-2); stroke: var(--axis); stroke-width: 1.2; }
+    .wire { fill: none; stroke: var(--ink-2); stroke-width: 1.6; }
+    .axis { stroke: var(--axis); stroke-width: 1.2; fill: none; }
+    .grid { stroke: var(--line); stroke-width: 1; }
+    .bracket { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+    .dash { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 4 3; fill: none; }
+    .ant1 { fill: none; stroke: var(--s1); stroke-width: 2.4; stroke-linecap: round; }
+    .ant2 { fill: none; stroke: var(--s2); stroke-width: 2.4; stroke-linecap: round; }
+    .ant3 { fill: none; stroke: var(--s3); stroke-width: 2.4; stroke-linecap: round; }
+    .mk1 { fill: var(--s1); } .mk2 { fill: var(--s2); } .mk3 { fill: var(--s3); }
+    .fa { fill: var(--s1); } .fb { fill: var(--s2); }
+    .onfill { fill: #fff; }
+    .env1 { fill: none; stroke: var(--s1); stroke-width: 2.2; stroke-linejoin: round; }
+    .env2 { fill: none; stroke: var(--s2); stroke-width: 2.2; stroke-dasharray: 7 3; stroke-linejoin: round; }
+    .spec { fill: none; stroke: var(--ink-2); stroke-width: 1.4; stroke-linejoin: round; }
+    .specfill { fill: url(#specgrad); }
+    .meas { fill: var(--s1); fill-opacity: .13; stroke: var(--s1); stroke-opacity: .55; stroke-width: 1; stroke-dasharray: 3 3; }
+    .floor { stroke: var(--s3); stroke-width: 2; stroke-dasharray: 6 4; }
+    .calib { fill: none; stroke: var(--s7); stroke-width: 1.4; stroke-dasharray: 5 4; }
+    .hist { fill: var(--s7); fill-opacity: .75; }
+    .zone { fill: var(--zone); }
+    .ci { stroke: var(--s1); stroke-width: 2.2; stroke-linecap: round; }
+    .pt { fill: var(--s1); stroke: var(--surface); stroke-width: 2; }
+    .arrow { stroke: var(--ink-2); stroke-width: 1.4; fill: none; marker-end: url(#arr); }
+    .arrowb { stroke: var(--ink-2); stroke-width: 1.4; fill: none; marker-end: url(#arr); marker-start: url(#arrs); }
+    .num { fill: var(--ink); }
+    .numt { fill: var(--surface); font-weight: 600; font-size: 14px; text-anchor: middle; }
+    .h1 { font-size: 34px; font-weight: 600; letter-spacing: -.01em; }
+    .h2 { font-size: 21px; font-weight: 600; }
+    .h3 { font-size: 17px; font-weight: 600; }
+    .eyebrow { font-family: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .08em; fill: var(--muted); }
+    .sub { font-size: 16px; fill: var(--ink-2); }
+    .t11 { font-size: 11px; } .t12 { font-size: 12px; } .t13 { font-size: 13px; } .t14 { font-size: 14px; } .t15 { font-size: 15px; }
+    .b { font-weight: 600; } .m { fill: var(--muted); } .i2 { fill: var(--ink-2); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+    .mid { text-anchor: middle; } .end { text-anchor: end; }
+    .c1 { fill: var(--s1); } .c2 { fill: var(--s2); } .c3 { fill: var(--s3); } .c7 { fill: var(--s7); }
+    .good { fill: var(--good-ink); }
+    .tag { fill: var(--surface-2); stroke: var(--line); }
+    .dot-good { fill: var(--good); } .dot-warn { fill: var(--warning); } .dot-crit { fill: var(--critical); }
+  </style>
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="#ffffff" fill-opacity=".55"/>
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#121512" stroke-opacity=".45" stroke-width="2"/>
+    </pattern>
+    <pattern id="hatchn" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#1baf7a" stroke-opacity=".6" stroke-width="1.5"/>
+    </pattern>
+    <linearGradient id="specgrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7d837d" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#7d837d" stop-opacity=".02"/>
+    </linearGradient>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,1 L9,5 L0,9 z" fill="#7d837d"/>
+    </marker>
+    <marker id="arrs" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M10,1 L1,5 L10,9 z" fill="#7d837d"/>
+    </marker>
+    <path id="antenna" d="M0,0 V-30 M0,-30 L-13,-46 M0,-30 L13,-46 M0,-30 V-48"/>
+  </defs>
+
+  <rect class="bg" width="1400" height="2030"/>
+
+  <!-- ===================== En-tête ===================== -->
+  <text x="48" y="58" class="eyebrow">OPENANTENNAVALIDATION · PRINCIPES DE MESURE</text>
+  <text x="48" y="98" class="h1">Comparer des antennes HF, et dire ce que l'on ne sait pas</text>
+  <text x="48" y="128" class="sub">Mesurer toutes les antennes en même temps, longtemps, sur des signaux réels, et ne conclure que lorsque l'écart dépasse l'erreur de la méthode.</text>
+
+  <!-- @section acquisition 150 512 -->
+  <circle cx="62" cy="180" r="14" class="num"/><text x="62" y="185" class="numt">1</text>
+  <text x="86" y="187" class="h2">Deux façons d'acquérir les signaux</text>
+
+  <!-- 1A Réception commutée -->
+  <rect x="48" y="206" width="632" height="440" rx="10" class="panel"/>
+  <text x="72" y="240" class="h3">Réception commutée</text>
+  <rect x="254" y="224" width="130" height="24" rx="12" class="tag"/>
+  <text x="319" y="241" class="t12 mid i2">1 SDR · 2 entrées</text>
+
+  <use href="#antenna" x="100" y="314" class="ant1"/>
+  <circle cx="76" cy="300" r="6" class="mk1"/><text x="70" y="330" class="t13 b c1">A</text>
+  <use href="#antenna" x="100" y="404" class="ant2"/>
+  <rect x="70" y="384" width="12" height="12" class="mk2"/><text x="70" y="420" class="t13 b c2">B</text>
+  <path d="M100,314 H260" class="wire"/>
+  <path d="M100,404 H260" class="wire"/>
+  <text x="180" y="306" class="t11 m mid">câble, pertes connues</text>
+
+  <rect x="250" y="276" width="200" height="160" rx="8" class="box"/>
+  <text x="350" y="298" class="t13 b mid">SDRplay RSP2 Pro</text>
+  <circle cx="276" cy="314" r="4" class="mk1"/>
+  <circle cx="276" cy="404" r="4" class="mk2"/>
+  <circle cx="324" cy="359" r="4" fill="var(--ink-2)"/>
+  <path d="M324,359 L279,317" class="wire" stroke-width="2.4"/>
+  <path d="M300,330 A40,40 0 0 0 300,388" class="dash" marker-end="url(#arr)" marker-start="url(#arrs)"/>
+  <path d="M324,359 H364" class="wire"/>
+  <rect x="364" y="340" width="70" height="38" rx="4" fill="var(--surface)" stroke="var(--axis)"/>
+  <text x="399" y="356" class="t11 mid">tuner</text><text x="399" y="370" class="t11 mid">+ CAN</text>
+  <text x="340" y="424" class="t11 m mid">bascule A ⇄ B</text>
+
+  <path d="M450,359 H492" class="arrow"/>
+  <text x="502" y="345" class="t13 b">Un seul récepteur</text>
+  <text x="502" y="364" class="t13 i2">même gain, même chaîne :</text>
+  <text x="502" y="382" class="t13 i2">pas d'écart entre récepteurs</text>
+
+  <text x="80" y="456" class="t12 b">Chronogramme · 25 bascules/s, 20 ms par entrée</text>
+  <rect x="540" y="445" width="16" height="12" fill="url(#hatch)" stroke="var(--axis)"/>
+  <text x="562" y="456" class="t12 m">neutralisé</text>
+  {{SWITCH}}
+  <text x="658" y="516" class="t11 m">ms</text>
+  <text x="80" y="552" class="t12 m">paires adjacentes A → B</text>
+
+  <text x="80" y="584" class="t13 i2">• Après chaque bascule : neutralisation = latence + établissement (mesurés au banc).</text>
+  <text x="80" y="606" class="t13 i2">• Appariement A → B, ou pivot : B contre la moyenne des A qui l'encadrent.</text>
+  <text x="80" y="628" class="t13 i2">• Limite : la voix (SSB) varie trop vite ; verdict donné par classe de signal.</text>
+
+  <!-- 1B Réception simultanée -->
+  <rect x="720" y="206" width="632" height="440" rx="10" class="panel"/>
+  <text x="744" y="240" class="h3">Réception simultanée</text>
+  <rect x="926" y="224" width="200" height="24" rx="12" class="tag"/>
+  <text x="1026" y="241" class="t12 mid i2">1 SDR par antenne · 2 à 10</text>
+
+  <use href="#antenna" x="772" y="306" class="ant1"/>
+  <circle cx="748" cy="292" r="6" class="mk1"/>
+  <use href="#antenna" x="772" y="366" class="ant2"/>
+  <rect x="742" y="346" width="12" height="12" class="mk2"/>
+  <use href="#antenna" x="772" y="426" class="ant3"/>
+  <path d="M748,400 l7,12 h-14 z" class="mk3"/>
+  <path d="M772,306 H860 M772,366 H860 M772,426 H860" class="wire"/>
+  <rect x="848" y="280" width="172" height="172" rx="10" class="calib"/>
+  <text x="934" y="273" class="t12 b mid c7">étalonnés entre eux en amont</text>
+  <rect x="860" y="290" width="148" height="32" rx="6" class="box"/>
+  <text x="934" y="311" class="t13 mid">RSP2 Pro</text>
+  <rect x="860" y="350" width="148" height="32" rx="6" class="box"/>
+  <text x="934" y="371" class="t13 mid">RTL-SDR Blog V4</text>
+  <rect x="860" y="410" width="148" height="32" rx="6" class="box"/>
+  <text x="934" y="431" class="t13 mid">Airspy HF+</text>
+  <path d="M1008,306 C1040,306 1040,366 1064,366 M1008,366 H1064 M1008,426 C1040,426 1040,366 1064,366" class="wire"/>
+  <path d="M1064,366 H1080" class="arrow"/>
+  <text x="1092" y="340" class="t13 b">Même instant</text>
+  <text x="1092" y="359" class="t13 i2">horloge = compteur</text>
+  <text x="1092" y="377" class="t13 i2">d'échantillons, un</text>
+  <text x="1092" y="395" class="t13 i2">processus par SDR</text>
+  <text x="1092" y="420" class="t12 m">modèles mélangeables</text>
+  <text x="1092" y="436" class="t12 m">(campagne « hétérogène »)</text>
+
+  <text x="780" y="470" class="t12 b">Alignement des flux · enveloppes de puissance d'un même signal</text>
+  <path d="M780,566 H1320" class="axis"/>
+  <path d="{{ENV1}}" class="env1"/>
+  <path d="{{ENV2}}" class="env2"/>
+  <line x1="{{PEAKX}}" y1="{{PEAKY1}}" x2="{{PEAKX}}" y2="566" class="dash"/>
+  <line x1="{{PEAKX2}}" y1="{{PEAKY2}}" x2="{{PEAKX2}}" y2="566" class="dash"/>
+  <text x="{{PEAKX2}}" y="488" class="t12 b" dx="8">Δt par corrélation</text>
+
+  <text x="780" y="584" class="t13 i2">• Toutes les classes de signal sont mesurables, voix comprise.</text>
+  <text x="780" y="606" class="t13 i2">• Δt hors tolérance : mesure « désalignée », SSB exclue.</text>
+  <text x="780" y="628" class="t13 i2">• Étalonnage relatif préalable (campagne A/A) : écarts entre SDR corrigés.</text>
+
+  <!-- @end -->
+  <!-- @section mesure 664 458 -->
+  <circle cx="62" cy="694" r="14" class="num"/><text x="62" y="699" class="numt">2</text>
+  <text x="86" y="701" class="h2">Ce que l'on mesure dans chaque signal</text>
+  <text x="1352" y="701" class="t14 m end">sans démodulation : de la puissance dans la largeur du signal</text>
+
+  <rect x="48" y="720" width="1304" height="388" rx="10" class="panel"/>
+  <line x1="100" y1="744" x2="100" y2="950" class="axis"/>
+  <line x1="100" y1="950" x2="1304" y2="950" class="axis"/>
+  <text x="92" y="756" class="t12 m end">dB</text>
+  <text x="1304" y="968" class="t12 m end">fréquence →</text>
+
+  <!-- largeurs de mesure -->
+  <rect x="241" y="752" width="18" height="198" class="meas"/>
+  <rect x="406" y="752" width="28" height="198" class="meas"/>
+  <rect x="676" y="752" width="90" height="198" class="meas"/>
+  <rect x="1038" y="752" width="164" height="198" class="meas"/>
+  <!-- cases de bruit voisines (SSB) -->
+  <rect x="590" y="880" width="72" height="70" fill="url(#hatchn)"/>
+  <rect x="780" y="880" width="72" height="70" fill="url(#hatchn)"/>
+
+  <path d="{{SPECFILL}}" class="specfill"/>
+  <path d="{{SPEC}}" class="spec"/>
+  <line x1="590" y1="912" x2="852" y2="912" class="floor"/>
+
+  <!-- annotations SSB -->
+  <path d="M870,909 V804" class="arrowb"/>
+  <line x1="764" y1="802" x2="882" y2="802" class="dash"/>
+  <text x="884" y="852" class="t14 b">SNR</text>
+  <text x="884" y="870" class="t12 i2">(S + B) / B</text>
+  <text x="884" y="798" class="t12 b">RSSI : puissance intégrée</text>
+  <text x="626" y="874" class="t11 c3 mid b">bruit</text>
+  <text x="816" y="874" class="t11 c3 mid b">bruit</text>
+  <rect x="1222" y="770" width="16" height="12" class="meas"/>
+  <text x="1244" y="781" class="t12 c1 b">largeur de mesure</text>
+  <line x1="1222" y1="800" x2="1238" y2="800" class="floor"/>
+  <text x="1244" y="805" class="t12 c3 b">plancher</text>
+
+  <!-- classes -->
+  <text x="250" y="990" class="t14 b mid">Porteuse / CW</text>
+  <text x="250" y="1008" class="t12 mono mid i2">50–200 Hz</text>
+  <text x="250" y="1025" class="t12 m mid">niveau par fenêtre</text>
+  <text x="420" y="990" class="t14 b mid">Numérique étroit</text>
+  <text x="420" y="1008" class="t12 mono mid i2">FT8 · FT4 · WSPR</text>
+  <text x="420" y="1025" class="t12 m mid">pendant l'émission</text>
+  <text x="721" y="990" class="t14 b mid">BLU (SSB)</text>
+  <text x="721" y="1008" class="t12 mono mid i2">≈ 2,7 kHz</text>
+  <text x="721" y="1025" class="t12 m mid">percentiles p50, p90</text>
+  <text x="1120" y="990" class="t14 b mid">AM / radiodiffusion</text>
+  <text x="1120" y="1008" class="t12 mono mid i2">6–10 kHz</text>
+  <text x="1120" y="1025" class="t12 m mid">porteuse</text>
+
+  <line x1="72" y1="1046" x2="1328" y2="1046" class="grid"/>
+  <text x="72" y="1072" class="eyebrow">RSSI</text>
+  <text x="72" y="1092" class="t13 i2">Puissance dans la largeur de mesure, par antenne.</text>
+  <text x="500" y="1072" class="eyebrow">PLANCHER DE BRUIT</text>
+  <text x="500" y="1092" class="t13 i2">Médiane des cases FFT libres voisines, même largeur.</text>
+  <text x="940" y="1072" class="eyebrow">SNR</text>
+  <text x="940" y="1092" class="t13 i2">Dans la même largeur, et ramené à 2 500 Hz.</text>
+
+  <!-- @end -->
+  <!-- @section qualification 1124 420 -->
+  <circle cx="62" cy="1154" r="14" class="num"/><text x="62" y="1159" class="numt">3</text>
+  <text x="86" y="1161" class="h2">Qualification : chiffrer l'erreur de la méthode avant de mesurer</text>
+
+  <!-- 3A Banc matériel -->
+  <rect x="48" y="1180" width="632" height="350" rx="10" class="panel"/>
+  <text x="72" y="1214" class="h3">Banc matériel</text>
+  <rect x="200" y="1198" width="200" height="24" rx="12" class="tag"/>
+  <text x="300" y="1215" class="t12 mid i2">mode commuté · quelques minutes</text>
+
+  <rect x="72" y="1244" width="132" height="44" rx="6" class="box"/>
+  <text x="138" y="1263" class="t12 mid">générateur</text><text x="138" y="1279" class="t12 mid">de bruit</text>
+  <path d="M204,1266 H246" class="wire"/>
+  <path d="M246,1250 L276,1266 L246,1282 Z" fill="var(--surface-2)" stroke="var(--ink-2)" stroke-width="1.4"/>
+  <text x="261" y="1302" class="t11 m mid">splitter</text>
+  <path d="M276,1266 C296,1266 296,1246 316,1246 H470" class="wire"/>
+  <path d="M276,1266 C296,1266 296,1286 316,1286 H346 M410,1286 H470" class="wire"/>
+  <rect x="346" y="1272" width="64" height="28" rx="4" fill="var(--surface)" stroke="var(--s2)" stroke-width="1.6"/>
+  <text x="378" y="1291" class="t12 b mid c2">−10 dB</text>
+  <text x="440" y="1240" class="t11 c1 b mid">A</text><text x="440" y="1280" class="t11 c2 b mid">B</text>
+  <rect x="470" y="1234" width="110" height="64" rx="6" class="box"/>
+  <text x="525" y="1262" class="t13 b mid">RSP2 Pro</text><text x="525" y="1280" class="t12 m mid">bascule A ⇄ B</text>
+
+  <!-- marche observée -->
+  <line x1="90" y1="1450" x2="640" y2="1450" class="axis"/>
+  <line x1="90" y1="1326" x2="90" y2="1450" class="axis"/>
+  <text x="96" y="1340" class="t11 m">niveau</text>
+  <rect x="300" y="1405" width="330" height="10" class="zone"/>
+  <path d="M90,1350 H300 L304,1328 L310,1426 L316,1398 L322,1416 L330,1406 L340,1411 L352,1409.5 H630" fill="none" stroke="var(--s1)" stroke-width="2.2" stroke-linejoin="round"/>
+  <line x1="280" y1="1336" x2="280" y2="1450" class="dash"/>
+  <text x="276" y="1464" class="t11 m end">commande</text>
+  <path d="M280,1436 H300" class="bracket"/>
+  <path d="M300,1436 H352" class="bracket"/>
+  <line x1="300" y1="1430" x2="300" y2="1442" class="bracket"/><line x1="352" y1="1430" x2="352" y2="1442" class="bracket"/>
+  <text x="290" y="1478" class="t12 i2 mid">latence</text>
+  <text x="360" y="1464" class="t12 i2">établissement à ±0,2 dB</text>
+  <path d="M598,1353 V1404" class="arrowb"/>
+  <text x="590" y="1384" class="t12 b end">justesse : 10 dB ?</text>
+
+  <text x="72" y="1508" class="t13 i2">→ durée de neutralisation et fraction utile ; aussi isolation des entrées, plancher sur charge 50 Ω.</text>
+
+  <!-- 3B Campagne A/A -->
+  <rect x="720" y="1180" width="632" height="350" rx="10" class="panel"/>
+  <text x="744" y="1214" class="h3">Campagne A/A</text>
+  <rect x="868" y="1198" width="190" height="24" rx="12" class="tag"/>
+  <text x="963" y="1215" class="t12 mid i2">les deux modes · 1 h à 24 h</text>
+
+  <use href="#antenna" x="772" y="1290" class="ant1"/>
+  <path d="M772,1290 H806" class="wire"/>
+  <path d="M806,1274 L836,1290 L806,1306 Z" fill="var(--surface-2)" stroke="var(--ink-2)" stroke-width="1.4"/>
+  <path d="M836,1290 C852,1290 852,1250 870,1250 H890 M836,1290 H890 M836,1290 C852,1290 852,1330 870,1330 H890" class="wire"/>
+  <rect x="890" y="1238" width="96" height="24" rx="5" class="box"/><text x="938" y="1255" class="t12 mid">SDR 1 · réf.</text>
+  <rect x="890" y="1278" width="96" height="24" rx="5" class="box"/><text x="938" y="1295" class="t12 mid">SDR 2</text>
+  <rect x="890" y="1318" width="96" height="24" rx="5" class="box"/><text x="938" y="1335" class="t12 mid">SDR N</text>
+  <text x="1010" y="1272" class="t15 b">Écart vrai = 0</text>
+  <text x="1010" y="1292" class="t13 i2">tout écart mesuré est</text>
+  <text x="1010" y="1310" class="t13 i2">l'erreur de la méthode</text>
+
+  <path d="M{{MARGL}},1360 V1440 M{{MARGR}},1360 V1440" class="dash"/>
+  <path d="M{{MARGL}},1366 H{{MARGR}}" class="arrowb"/>
+  <text x="910" y="1356" class="t12 b mid">marge = |biais| + 2σ</text>
+  {{HIST}}
+  <line x1="770" y1="1440" x2="1050" y2="1440" class="axis"/>
+  <line x1="910" y1="1440" x2="910" y2="1446" class="axis"/>
+  <text x="910" y="1460" class="t11 m mid mono">0 dB</text>
+  <text x="1050" y="1460" class="t11 m end">écart B − A par fenêtre</text>
+
+  <text x="1090" y="1366" class="eyebrow">VERDICT PAR CLASSE · EXEMPLE</text>
+  <circle cx="1096" cy="1386" r="5" class="dot-good"/><text x="1108" y="1391" class="t13">Porteuse / CW</text>
+  <circle cx="1096" cy="1408" r="5" class="dot-good"/><text x="1108" y="1413" class="t13">Numérique étroit</text>
+  <circle cx="1096" cy="1430" r="5" class="dot-warn"/><text x="1108" y="1435" class="t13">AM : dégradé</text>
+  <circle cx="1096" cy="1452" r="5" class="dot-crit"/><text x="1108" y="1457" class="t13">SSB : inexploitable</text>
+
+  <text x="744" y="1508" class="t13 i2">→ biais corrigé par fréquence ; la marge de chaque classe accompagne les campagnes.</text>
+
+  <!-- @end -->
+  <!-- @section conclusion 1546 440 -->
+  <circle cx="62" cy="1576" r="14" class="num"/><text x="62" y="1581" class="numt">4</text>
+  <text x="86" y="1583" class="h2">De la mesure à la conclusion</text>
+
+  <rect x="48" y="1602" width="1304" height="370" rx="10" class="panel"/>
+
+  <rect x="72" y="1626" width="232" height="132" rx="8" class="box"/>
+  <text x="88" y="1650" class="eyebrow">ÉTAPE 1</text>
+  <text x="88" y="1672" class="t15 b">Mesures brutes</text>
+  <text x="88" y="1694" class="t13 i2">Horodatées, jamais modifiées.</text>
+  <text x="88" y="1712" class="t13 i2">Saturation, perte de flux,</text>
+  <text x="88" y="1730" class="t13 i2">chevauchement : exclues</text>
+  <text x="88" y="1748" class="t13 i2">et comptées.</text>
+
+  <path d="M308,1692 H322" class="arrow"/>
+  <rect x="328" y="1626" width="232" height="132" rx="8" class="box"/>
+  <text x="344" y="1650" class="eyebrow">ÉTAPE 2</text>
+  <text x="344" y="1672" class="t15 b">Fenêtres de temps</text>
+  <text x="344" y="1694" class="t13 i2 mono">10 s · 1 min · 5 min · 15 min</text>
+  <text x="344" y="1712" class="t13 i2">selon la durée de campagne ;</text>
+  <text x="344" y="1730" class="t13 i2">médiane, p10, p90 par signal</text>
+  <text x="344" y="1748" class="t13 i2">et par antenne.</text>
+
+  <path d="M564,1692 H578" class="arrow"/>
+  <rect x="584" y="1626" width="232" height="132" rx="8" class="box"/>
+  <text x="600" y="1650" class="eyebrow">ÉTAPE 3</text>
+  <text x="600" y="1672" class="t15 b">Écart à la référence</text>
+  <text x="600" y="1694" class="t13 i2">Δ = antenne − référence,</text>
+  <text x="600" y="1712" class="t13 i2">apparié mesure à mesure.</text>
+  <text x="600" y="1730" class="t13 i2">Corrections recalculables :</text>
+  <text x="600" y="1748" class="t13 i2">profil, pertes des câbles.</text>
+
+  <path d="M820,1692 H834" class="arrow"/>
+  <rect x="840" y="1626" width="232" height="132" rx="8" class="box"/>
+  <text x="856" y="1650" class="eyebrow">ÉTAPE 4</text>
+  <text x="856" y="1672" class="t15 b">Incertitude</text>
+  <text x="856" y="1694" class="t13 i2">IC à 95 % par bootstrap</text>
+  <text x="856" y="1712" class="t13 i2">par blocs (mesures corrélées).</text>
+  <text x="856" y="1730" class="t13 i2">Correction de Holm : jusqu'à</text>
+  <text x="856" y="1748" class="t13 i2">45 paires pour 10 antennes.</text>
+
+  <path d="M1076,1692 H1090" class="arrow"/>
+  <rect x="1096" y="1626" width="232" height="132" rx="8" fill="var(--surface)" stroke="var(--s1)" stroke-width="1.8"/>
+  <text x="1112" y="1650" class="eyebrow">ÉTAPE 5</text>
+  <text x="1112" y="1672" class="t15 b">Règle de conclusion</text>
+  <text x="1112" y="1694" class="t13 i2">Écart affirmé seulement si</text>
+  <text x="1112" y="1712" class="t13 b">|Δ| > marge de qualification</text>
+  <text x="1112" y="1730" class="t13 b">et IC excluant zéro.</text>
+  <text x="1112" y="1748" class="t13 i2">Sinon : pas d'écart significatif.</text>
+
+  <!-- forest plot -->
+  <rect x="{{FML}}" y="1784" width="{{FMW}}" height="128" class="zone"/>
+  <text x="{{FZ0}}" y="1798" class="t11 m mid">marge de qualification</text>
+  <line x1="{{FZ0}}" y1="1802" x2="{{FZ0}}" y2="1912" class="dash"/>
+  <line x1="430" y1="1912" x2="1090" y2="1912" class="axis"/>
+  {{FTICKS}}
+  {{FOREST}}
+  <text x="{{FZ0}}" y="1956" class="t12 m mid">écart en dB, médiane et intervalle de confiance à 95 % · valeurs illustratives</text>
+
+  <!-- @end -->
+  <!-- pied -->
+  <text x="48" y="2004" class="t13 m">Campagnes d'une minute à un mois · résultats selon l'heure solaire (NVIS de jour, DX de nuit) · logiciel libre GPLv3</text>
+</svg>

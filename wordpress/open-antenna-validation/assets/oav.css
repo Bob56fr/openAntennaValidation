@@ -34,3 +34,6 @@
 .oav-doc table { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); }
 .oav-doc td { white-space: normal; font-size: 14px; }
 .oav-doc em { color: var(--ink-2); }
+/* Figures wider than the text column (diagrams drawn at 1352 px), centred on it. */
+.oav-doc .oav-figure { width: min(1240px, calc(100vw - 32px)); margin: 6px calc(50% - min(620px, 50vw - 16px)); }
+.oav-doc .oav-figure img { display: block; width: 100%; height: auto; border-radius: var(--r); }

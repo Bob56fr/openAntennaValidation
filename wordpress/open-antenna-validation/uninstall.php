@@ -18,6 +18,10 @@ foreach (['oav_db_version', 'oav_quota_mb', 'oav_package_mb', 'oav_demo', 'oav_t
 }
 delete_transient('oav_storage');
 delete_transient('oav_presentation');
+// Images of the presentation: one transient and one last good copy per file.
+$wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_oav\_presentation\_img\_%'"
+    . " OR option_name LIKE '\_transient\_timeout\_oav\_presentation\_img\_%'"
+    . " OR option_name LIKE 'oav\_presentation\_img\_%'");
 remove_role('oav_operator');
 remove_role('oav_pending');
 foreach (['administrator'] as $role_name) {

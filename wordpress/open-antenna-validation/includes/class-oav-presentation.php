@@ -5,6 +5,9 @@
  *
  * Kept for an hour; the last good copy is kept as an option for when GitHub does not answer,
  * and the copy shipped with the plugin (assets/presentation.md) comes last.
+ * Images (a line `![text](schemas/name.svg)`, path relative to the Markdown file) follow the
+ * same chain (copy shipped in assets/docs/) and are embedded in the page (data URI), so that
+ * visitors never load anything from GitHub. SVG colours follow the theme of the plugin.
  * Attributes: titre="oui" keeps the first heading (default: dropped, the page has its title).
  */
 
@@ -75,7 +78,7 @@ class OAV_Presentation
 
     // --- a small Markdown renderer: what docs/presentation.md uses, nothing more --------------
 
-    /** Headings, paragraphs, lists, tables, bold, italics, code, links. Everything escaped. */
+    /** Headings, paragraphs, lists, tables, images, bold, italics, code, links. Everything escaped. */
     public static function render(string $markdown): string
     {
         $lines = preg_split('/\r\n|\r|\n/', $markdown);
@@ -119,6 +122,10 @@ class OAV_Presentation
             if ($trim === '') {
                 $flush_para();
                 $flush_list();
+            } elseif (preg_match('/^!\[([^\]]*)\]\(([^)\s]+)\)$/', $trim, $m)) {
+                $flush_para();
+                $flush_list();
+                $html .= self::image($m[1], $m[2]);
             } elseif (preg_match('/^(#{1,4})\s+(.*)$/', $trim, $m)) {
                 $flush_para();
                 $flush_list();
@@ -143,6 +150,58 @@ class OAV_Presentation
         $flush_para();
         $flush_list();
         return $html;
+    }
+
+    /** Image file next to the Markdown: cache, GitHub, last good copy, copy shipped with the plugin. */
+    public static function image_source(string $path, bool $fresh = false): string
+    {
+        $key = 'oav_presentation_img_' . md5($path);
+        $cached = $fresh ? false : get_transient($key);
+        if (is_string($cached) && $cached !== '') {
+            return $cached;
+        }
+        $response = wp_remote_get(dirname(self::url()) . '/' . $path, ['timeout' => 8]);
+        if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
+            $data = (string) wp_remote_retrieve_body($response);
+            if ($data !== '' && strlen($data) < 1000000) {
+                set_transient($key, $data, HOUR_IN_SECONDS);
+                update_option($key . '_last', $data, false);
+                return $data;
+            }
+        }
+        $last = (string) get_option($key . '_last', '');
+        if ($last === '') {
+            $file = OAV_DIR . 'assets/docs/' . $path;
+            $last = is_readable($file) ? (string) file_get_contents($file) : '';
+        }
+        if ($last !== '') {
+            set_transient($key, $last, 10 * MINUTE_IN_SECONDS);
+        }
+        return $last;
+    }
+
+    /** A figure, embedded as a data URI; nothing for a path outside the documentation. */
+    private static function image(string $alt, string $path): string
+    {
+        if (!preg_match('#^[a-z0-9_-]+(?:/[a-z0-9_-]+)*\.(svg|png)$#', $path, $m)) {
+            return '';
+        }
+        $data = self::image_source($path);
+        if ($data === '') {
+            return '';
+        }
+        if ($m[1] === 'svg') {
+            // The diagrams switch to dark with the system; a theme forced by the plugin wins.
+            $theme = OAV_DB::theme();
+            if ($theme !== 'auto') {
+                $data = str_replace('@media (prefers-color-scheme: dark)',
+                                    $theme === 'dark' ? '@media all' : '@media not all', $data);
+            }
+        }
+        $mime = $m[1] === 'svg' ? 'image/svg+xml' : 'image/png';
+        return '<figure class="oav-figure"><img src="data:' . $mime . ';base64,' . base64_encode($data)
+            . '" alt="' . esc_attr($alt) . '" loading="lazy" decoding="async"></figure>' . "
+";
     }
 
     private static function inline(string $text): string

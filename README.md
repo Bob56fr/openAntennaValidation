@@ -4,7 +4,7 @@ Compare la réception de deux à dix antennes HF en mesurant, sur les mêmes sig
 
 **Présentation du projet** (méthode, état d'avancement, participation) : [docs/presentation.md](docs/presentation.md).
 
-![Principes de mesure : réception commutée et simultanée, mesure dans la largeur de chaque signal, qualification, chaîne statistique](docs/schema-principes-mesure.svg)
+![Principes de mesure : réception commutée et simultanée, mesure dans la largeur de chaque signal, qualification, chaîne statistique](docs/schemas/principes-mesure.svg)
 
 - Cahier des charges : [docs/cahier-des-charges.md](docs/cahier-des-charges.md)
 - Décisions et écarts : [docs/decisions.md](docs/decisions.md)

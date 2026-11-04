@@ -1,0 +1,211 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 150 1352 512" width="1352" height="512" role="img" aria-labelledby="title desc">
+  <title id="title">openAntennaValidation : principes de mesure</title>
+  <desc id="desc">Schéma en quatre parties : réception commutée et réception simultanée ; mesure du niveau, du plancher de bruit et du SNR dans la largeur de chaque classe de signal ; qualification par banc matériel et campagne A/A ; chaîne statistique jusqu'à la règle de conclusion.</desc>
+  <style>
+    svg { --bg:#f2f3f0; --surface:#fcfcfb; --surface-2:#f6f7f4; --ink:#121512; --ink-2:#4b514c; --muted:#7d837d;
+          --line:#e1e2dc; --axis:#c3c5bd; --zone:rgba(125,131,125,.14);
+          --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --good-ink:#006300;
+          --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s7:#6250d6; }
+    @media (prefers-color-scheme: dark) {
+      svg { --bg:#0e100e; --surface:#181a18; --surface-2:#1e211e; --ink:#eef0ec; --ink-2:#c0c4bc; --muted:#8a8e88;
+            --line:#2b2e2b; --axis:#3b3e3a; --zone:rgba(138,142,136,.16); --good-ink:#3cc23c;
+            --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s7:#9085e9; }
+    }
+    text { font-family: "IBM Plex Sans", system-ui, "Segoe UI", sans-serif; fill: var(--ink); }
+    .bg { fill: var(--bg); }
+    .panel { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+    .box { fill: var(--surface-2); stroke: var(--axis); stroke-width: 1.2; }
+    .wire { fill: none; stroke: var(--ink-2); stroke-width: 1.6; }
+    .axis { stroke: var(--axis); stroke-width: 1.2; fill: none; }
+    .grid { stroke: var(--line); stroke-width: 1; }
+    .bracket { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+    .dash { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 4 3; fill: none; }
+    .ant1 { fill: none; stroke: var(--s1); stroke-width: 2.4; stroke-linecap: round; }
+    .ant2 { fill: none; stroke: var(--s2); stroke-width: 2.4; stroke-linecap: round; }
+    .ant3 { fill: none; stroke: var(--s3); stroke-width: 2.4; stroke-linecap: round; }
+    .mk1 { fill: var(--s1); } .mk2 { fill: var(--s2); } .mk3 { fill: var(--s3); }
+    .fa { fill: var(--s1); } .fb { fill: var(--s2); }
+    .onfill { fill: #fff; }
+    .env1 { fill: none; stroke: var(--s1); stroke-width: 2.2; stroke-linejoin: round; }
+    .env2 { fill: none; stroke: var(--s2); stroke-width: 2.2; stroke-dasharray: 7 3; stroke-linejoin: round; }
+    .spec { fill: none; stroke: var(--ink-2); stroke-width: 1.4; stroke-linejoin: round; }
+    .specfill { fill: url(#specgrad); }
+    .meas { fill: var(--s1); fill-opacity: .13; stroke: var(--s1); stroke-opacity: .55; stroke-width: 1; stroke-dasharray: 3 3; }
+    .floor { stroke: var(--s3); stroke-width: 2; stroke-dasharray: 6 4; }
+    .calib { fill: none; stroke: var(--s7); stroke-width: 1.4; stroke-dasharray: 5 4; }
+    .hist { fill: var(--s7); fill-opacity: .75; }
+    .zone { fill: var(--zone); }
+    .ci { stroke: var(--s1); stroke-width: 2.2; stroke-linecap: round; }
+    .pt { fill: var(--s1); stroke: var(--surface); stroke-width: 2; }
+    .arrow { stroke: var(--ink-2); stroke-width: 1.4; fill: none; marker-end: url(#arr); }
+    .arrowb { stroke: var(--ink-2); stroke-width: 1.4; fill: none; marker-end: url(#arr); marker-start: url(#arrs); }
+    .num { fill: var(--ink); }
+    .numt { fill: var(--surface); font-weight: 600; font-size: 14px; text-anchor: middle; }
+    .h1 { font-size: 34px; font-weight: 600; letter-spacing: -.01em; }
+    .h2 { font-size: 21px; font-weight: 600; }
+    .h3 { font-size: 17px; font-weight: 600; }
+    .eyebrow { font-family: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .08em; fill: var(--muted); }
+    .sub { font-size: 16px; fill: var(--ink-2); }
+    .t11 { font-size: 11px; } .t12 { font-size: 12px; } .t13 { font-size: 13px; } .t14 { font-size: 14px; } .t15 { font-size: 15px; }
+    .b { font-weight: 600; } .m { fill: var(--muted); } .i2 { fill: var(--ink-2); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+    .mid { text-anchor: middle; } .end { text-anchor: end; }
+    .c1 { fill: var(--s1); } .c2 { fill: var(--s2); } .c3 { fill: var(--s3); } .c7 { fill: var(--s7); }
+    .good { fill: var(--good-ink); }
+    .tag { fill: var(--surface-2); stroke: var(--line); }
+    .dot-good { fill: var(--good); } .dot-warn { fill: var(--warning); } .dot-crit { fill: var(--critical); }
+  </style>
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="#ffffff" fill-opacity=".55"/>
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#121512" stroke-opacity=".45" stroke-width="2"/>
+    </pattern>
+    <pattern id="hatchn" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#1baf7a" stroke-opacity=".6" stroke-width="1.5"/>
+    </pattern>
+    <linearGradient id="specgrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7d837d" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#7d837d" stop-opacity=".02"/>
+    </linearGradient>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,1 L9,5 L0,9 z" fill="#7d837d"/>
+    </marker>
+    <marker id="arrs" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M10,1 L1,5 L10,9 z" fill="#7d837d"/>
+    </marker>
+    <path id="antenna" d="M0,0 V-30 M0,-30 L-13,-46 M0,-30 L13,-46 M0,-30 V-48"/>
+  </defs>
+
+  <rect class="bg" x="24" y="150" width="1352" height="512" rx="12"/>
+  <text x="48" y="187" class="h2">Deux façons d'acquérir les signaux</text>
+
+  <!-- 1A Réception commutée -->
+  <rect x="48" y="206" width="632" height="440" rx="10" class="panel"/>
+  <text x="72" y="240" class="h3">Réception commutée</text>
+  <rect x="254" y="224" width="130" height="24" rx="12" class="tag"/>
+  <text x="319" y="241" class="t12 mid i2">1 SDR · 2 entrées</text>
+
+  <use href="#antenna" x="100" y="314" class="ant1"/>
+  <circle cx="76" cy="300" r="6" class="mk1"/><text x="70" y="330" class="t13 b c1">A</text>
+  <use href="#antenna" x="100" y="404" class="ant2"/>
+  <rect x="70" y="384" width="12" height="12" class="mk2"/><text x="70" y="420" class="t13 b c2">B</text>
+  <path d="M100,314 H260" class="wire"/>
+  <path d="M100,404 H260" class="wire"/>
+  <text x="180" y="306" class="t11 m mid">câble, pertes connues</text>
+
+  <rect x="250" y="276" width="200" height="160" rx="8" class="box"/>
+  <text x="350" y="298" class="t13 b mid">SDRplay RSP2 Pro</text>
+  <circle cx="276" cy="314" r="4" class="mk1"/>
+  <circle cx="276" cy="404" r="4" class="mk2"/>
+  <circle cx="324" cy="359" r="4" fill="var(--ink-2)"/>
+  <path d="M324,359 L279,317" class="wire" stroke-width="2.4"/>
+  <path d="M300,330 A40,40 0 0 0 300,388" class="dash" marker-end="url(#arr)" marker-start="url(#arrs)"/>
+  <path d="M324,359 H364" class="wire"/>
+  <rect x="364" y="340" width="70" height="38" rx="4" fill="var(--surface)" stroke="var(--axis)"/>
+  <text x="399" y="356" class="t11 mid">tuner</text><text x="399" y="370" class="t11 mid">+ CAN</text>
+  <text x="340" y="424" class="t11 m mid">bascule A ⇄ B</text>
+
+  <path d="M450,359 H492" class="arrow"/>
+  <text x="502" y="345" class="t13 b">Un seul récepteur</text>
+  <text x="502" y="364" class="t13 i2">même gain, même chaîne :</text>
+  <text x="502" y="382" class="t13 i2">pas d'écart entre récepteurs</text>
+
+  <text x="80" y="456" class="t12 b">Chronogramme · 25 bascules/s, 20 ms par entrée</text>
+  <rect x="540" y="445" width="16" height="12" fill="url(#hatch)" stroke="var(--axis)"/>
+  <text x="562" y="456" class="t12 m">neutralisé</text>
+  <rect x="80" y="466" width="70" height="30" class="fa"/>
+    <rect x="80" y="466" width="17.5" height="30" fill="url(#hatch)"/>
+    <text x="124" y="486" class="t13 b mid onfill">A</text>
+    <rect x="150" y="466" width="70" height="30" class="fb"/>
+    <rect x="150" y="466" width="17.5" height="30" fill="url(#hatch)"/>
+    <text x="194" y="486" class="t13 b mid onfill">B</text>
+    <rect x="220" y="466" width="70" height="30" class="fa"/>
+    <rect x="220" y="466" width="17.5" height="30" fill="url(#hatch)"/>
+    <text x="264" y="486" class="t13 b mid onfill">A</text>
+    <rect x="290" y="466" width="70" height="30" class="fb"/>
+    <rect x="290" y="466" width="17.5" height="30" fill="url(#hatch)"/>
+    <text x="334" y="486" class="t13 b mid onfill">B</text>
+    <rect x="360" y="466" width="70" height="30" class="fa"/>
+    <rect x="360" y="466" width="17.5" height="30" fill="url(#hatch)"/>
+    <text x="404" y="486" class="t13 b mid onfill">A</text>
+    <rect x="430" y="466" width="70" height="30" class="fb"/>
+    <rect x="430" y="466" width="17.5" height="30" fill="url(#hatch)"/>
+    <text x="474" y="486" class="t13 b mid onfill">B</text>
+    <rect x="500" y="466" width="70" height="30" class="fa"/>
+    <rect x="500" y="466" width="17.5" height="30" fill="url(#hatch)"/>
+    <text x="544" y="486" class="t13 b mid onfill">A</text>
+    <rect x="570" y="466" width="70" height="30" class="fb"/>
+    <rect x="570" y="466" width="17.5" height="30" fill="url(#hatch)"/>
+    <text x="614" y="486" class="t13 b mid onfill">B</text>
+    <line x1="80" y1="496" x2="80" y2="502" class="axis"/>
+    <text x="80" y="516" class="t11 m mid mono">0</text>
+    <line x1="150" y1="496" x2="150" y2="502" class="axis"/>
+    <text x="150" y="516" class="t11 m mid mono">20</text>
+    <line x1="220" y1="496" x2="220" y2="502" class="axis"/>
+    <text x="220" y="516" class="t11 m mid mono">40</text>
+    <line x1="290" y1="496" x2="290" y2="502" class="axis"/>
+    <text x="290" y="516" class="t11 m mid mono">60</text>
+    <line x1="360" y1="496" x2="360" y2="502" class="axis"/>
+    <text x="360" y="516" class="t11 m mid mono">80</text>
+    <line x1="430" y1="496" x2="430" y2="502" class="axis"/>
+    <text x="430" y="516" class="t11 m mid mono">100</text>
+    <line x1="500" y1="496" x2="500" y2="502" class="axis"/>
+    <text x="500" y="516" class="t11 m mid mono">120</text>
+    <line x1="570" y1="496" x2="570" y2="502" class="axis"/>
+    <text x="570" y="516" class="t11 m mid mono">140</text>
+    <line x1="640" y1="496" x2="640" y2="502" class="axis"/>
+    <text x="640" y="516" class="t11 m mid mono">160</text>
+    <path d="M124,526 v7 H194 v-7" class="bracket"/>
+    <path d="M264,526 v7 H334 v-7" class="bracket"/>
+    <path d="M404,526 v7 H474 v-7" class="bracket"/>
+    <path d="M544,526 v7 H614 v-7" class="bracket"/>
+  <text x="658" y="516" class="t11 m">ms</text>
+  <text x="80" y="552" class="t12 m">paires adjacentes A → B</text>
+
+  <text x="80" y="584" class="t13 i2">• Après chaque bascule : neutralisation = latence + établissement (mesurés au banc).</text>
+  <text x="80" y="606" class="t13 i2">• Appariement A → B, ou pivot : B contre la moyenne des A qui l'encadrent.</text>
+  <text x="80" y="628" class="t13 i2">• Limite : la voix (SSB) varie trop vite ; verdict donné par classe de signal.</text>
+
+  <!-- 1B Réception simultanée -->
+  <rect x="720" y="206" width="632" height="440" rx="10" class="panel"/>
+  <text x="744" y="240" class="h3">Réception simultanée</text>
+  <rect x="926" y="224" width="200" height="24" rx="12" class="tag"/>
+  <text x="1026" y="241" class="t12 mid i2">1 SDR par antenne · 2 à 10</text>
+
+  <use href="#antenna" x="772" y="306" class="ant1"/>
+  <circle cx="748" cy="292" r="6" class="mk1"/>
+  <use href="#antenna" x="772" y="366" class="ant2"/>
+  <rect x="742" y="346" width="12" height="12" class="mk2"/>
+  <use href="#antenna" x="772" y="426" class="ant3"/>
+  <path d="M748,400 l7,12 h-14 z" class="mk3"/>
+  <path d="M772,306 H860 M772,366 H860 M772,426 H860" class="wire"/>
+  <rect x="848" y="280" width="172" height="172" rx="10" class="calib"/>
+  <text x="934" y="273" class="t12 b mid c7">étalonnés entre eux en amont</text>
+  <rect x="860" y="290" width="148" height="32" rx="6" class="box"/>
+  <text x="934" y="311" class="t13 mid">RSP2 Pro</text>
+  <rect x="860" y="350" width="148" height="32" rx="6" class="box"/>
+  <text x="934" y="371" class="t13 mid">RTL-SDR Blog V4</text>
+  <rect x="860" y="410" width="148" height="32" rx="6" class="box"/>
+  <text x="934" y="431" class="t13 mid">Airspy HF+</text>
+  <path d="M1008,306 C1040,306 1040,366 1064,366 M1008,366 H1064 M1008,426 C1040,426 1040,366 1064,366" class="wire"/>
+  <path d="M1064,366 H1080" class="arrow"/>
+  <text x="1092" y="340" class="t13 b">Même instant</text>
+  <text x="1092" y="359" class="t13 i2">horloge = compteur</text>
+  <text x="1092" y="377" class="t13 i2">d'échantillons, un</text>
+  <text x="1092" y="395" class="t13 i2">processus par SDR</text>
+  <text x="1092" y="420" class="t12 m">modèles mélangeables</text>
+  <text x="1092" y="436" class="t12 m">(campagne « hétérogène »)</text>
+
+  <text x="780" y="470" class="t12 b">Alignement des flux · enveloppes de puissance d'un même signal</text>
+  <path d="M780,566 H1320" class="axis"/>
+  <path d="M780.0,505.3 L783.0,502.9 L786.0,501.1 L789.0,499.8 L792.0,499.2 L795.0,499.1 L798.0,499.6 L801.0,500.6 L804.0,502.1 L807.0,503.8 L810.0,505.7 L813.0,507.7 L816.0,509.7 L819.0,511.6 L822.0,513.2 L825.0,514.6 L828.0,515.6 L831.0,516.2 L834.0,516.4 L837.0,516.3 L840.0,515.9 L843.0,515.3 L846.0,514.5 L849.0,513.6 L852.0,512.7 L855.0,512.0 L858.0,511.6 L861.0,511.4 L864.0,511.7 L867.0,512.4 L870.0,513.6 L873.0,515.3 L876.0,517.4 L879.0,520.0 L882.0,522.8 L885.0,526.0 L888.0,529.2 L891.0,532.5 L894.0,535.6 L897.0,538.5 L900.0,541.1 L903.0,543.2 L906.0,544.7 L909.0,545.6 L912.0,545.9 L915.0,545.5 L918.0,544.4 L921.0,542.7 L924.0,540.5 L927.0,537.8 L930.0,534.7 L933.0,531.5 L936.0,528.1 L939.0,524.7 L942.0,521.5 L945.0,518.5 L948.0,515.9 L951.0,513.7 L954.0,512.0 L957.0,510.7 L960.0,510.0 L963.0,509.7 L966.0,509.9 L969.0,510.4 L972.0,511.1 L975.0,512.1 L978.0,513.0 L981.0,513.9 L984.0,514.7 L987.0,515.3 L990.0,515.5 L993.0,515.4 L996.0,515.0 L999.0,514.1 L1002.0,513.0 L1005.0,511.5 L1008.0,509.8 L1011.0,508.0 L1014.0,506.2 L1017.0,504.4 L1020.0,502.8 L1023.0,501.5 L1026.0,500.7 L1029.0,500.3 L1032.0,500.4 L1035.0,501.1 L1038.0,502.5 L1041.0,504.4 L1044.0,506.9 L1047.0,509.8 L1050.0,513.2 L1053.0,516.8 L1056.0,520.6 L1059.0,524.5 L1062.0,528.2 L1065.0,531.7 L1068.0,534.9 L1071.0,537.6 L1074.0,539.8 L1077.0,541.4 L1080.0,542.3 L1083.0,542.7 L1086.0,542.4 L1089.0,541.5 L1092.0,540.2 L1095.0,538.4 L1098.0,536.4 L1101.0,534.2 L1104.0,531.9 L1107.0,529.6 L1110.0,527.5 L1113.0,525.6 L1116.0,524.1 L1119.0,522.9 L1122.0,522.1 L1125.0,521.7 L1128.0,521.6 L1131.0,521.9 L1134.0,522.4 L1137.0,523.1 L1140.0,523.9 L1143.0,524.6 L1146.0,525.2 L1149.0,525.6 L1152.0,525.7 L1155.0,525.4 L1158.0,524.6 L1161.0,523.4 L1164.0,521.8 L1167.0,519.7 L1170.0,517.3 L1173.0,514.5 L1176.0,511.6 L1179.0,508.5 L1182.0,505.5 L1185.0,502.7 L1188.0,500.1 L1191.0,497.9 L1194.0,496.1 L1197.0,495.0 L1200.0,494.4 L1203.0,494.6 L1206.0,495.4 L1209.0,496.8 L1212.0,498.9 L1215.0,501.5 L1218.0,504.5 L1221.0,507.8 L1224.0,511.3 L1227.0,514.8 L1230.0,518.3 L1233.0,521.7 L1236.0,524.7 L1239.0,527.3 L1242.0,529.5 L1245.0,531.2 L1248.0,532.3 L1251.0,532.9 L1254.0,533.0 L1257.0,532.7 L1260.0,532.1 L1263.0,531.1 L1266.0,530.0 L1269.0,528.9 L1272.0,527.8 L1275.0,526.8 L1278.0,526.0 L1281.0,525.6 L1284.0,525.5 L1287.0,525.7 L1290.0,526.3 L1293.0,527.3 L1296.0,528.5 L1299.0,529.9 L1302.0,531.5 L1305.0,533.0 L1308.0,534.5 L1311.0,535.8 L1314.0,536.8 L1317.0,537.4 L1320.0,537.5" class="env1"/>
+  <path d="M794.0,511.3 L797.0,508.9 L800.0,507.1 L803.0,505.8 L806.0,505.2 L809.0,505.1 L812.0,505.6 L815.0,506.6 L818.0,508.1 L821.0,509.8 L824.0,511.7 L827.0,513.7 L830.0,515.7 L833.0,517.6 L836.0,519.2 L839.0,520.6 L842.0,521.6 L845.0,522.2 L848.0,522.4 L851.0,522.3 L854.0,521.9 L857.0,521.3 L860.0,520.5 L863.0,519.6 L866.0,518.7 L869.0,518.0 L872.0,517.6 L875.0,517.4 L878.0,517.7 L881.0,518.4 L884.0,519.6 L887.0,521.3 L890.0,523.4 L893.0,526.0 L896.0,528.8 L899.0,532.0 L902.0,535.2 L905.0,538.5 L908.0,541.6 L911.0,544.5 L914.0,547.1 L917.0,549.2 L920.0,550.7 L923.0,551.6 L926.0,551.9 L929.0,551.5 L932.0,550.4 L935.0,548.7 L938.0,546.5 L941.0,543.8 L944.0,540.7 L947.0,537.5 L950.0,534.1 L953.0,530.7 L956.0,527.5 L959.0,524.5 L962.0,521.9 L965.0,519.7 L968.0,518.0 L971.0,516.7 L974.0,516.0 L977.0,515.7 L980.0,515.9 L983.0,516.4 L986.0,517.1 L989.0,518.1 L992.0,519.0 L995.0,519.9 L998.0,520.7 L1001.0,521.3 L1004.0,521.5 L1007.0,521.4 L1010.0,521.0 L1013.0,520.1 L1016.0,519.0 L1019.0,517.5 L1022.0,515.8 L1025.0,514.0 L1028.0,512.2 L1031.0,510.4 L1034.0,508.8 L1037.0,507.5 L1040.0,506.7 L1043.0,506.3 L1046.0,506.4 L1049.0,507.1 L1052.0,508.5 L1055.0,510.4 L1058.0,512.9 L1061.0,515.8 L1064.0,519.2 L1067.0,522.8 L1070.0,526.6 L1073.0,530.5 L1076.0,534.2 L1079.0,537.7 L1082.0,540.9 L1085.0,543.6 L1088.0,545.8 L1091.0,547.4 L1094.0,548.3 L1097.0,548.7 L1100.0,548.4 L1103.0,547.5 L1106.0,546.2 L1109.0,544.4 L1112.0,542.4 L1115.0,540.2 L1118.0,537.9 L1121.0,535.6 L1124.0,533.5 L1127.0,531.6 L1130.0,530.1 L1133.0,528.9 L1136.0,528.1 L1139.0,527.7 L1142.0,527.6 L1145.0,527.9 L1148.0,528.4 L1151.0,529.1 L1154.0,529.9 L1157.0,530.6 L1160.0,531.2 L1163.0,531.6 L1166.0,531.7 L1169.0,531.4 L1172.0,530.6 L1175.0,529.4 L1178.0,527.8 L1181.0,525.7 L1184.0,523.3 L1187.0,520.5 L1190.0,517.6 L1193.0,514.5 L1196.0,511.5 L1199.0,508.7 L1202.0,506.1 L1205.0,503.9 L1208.0,502.1 L1211.0,501.0 L1214.0,500.4 L1217.0,500.6 L1220.0,501.4 L1223.0,502.8 L1226.0,504.9 L1229.0,507.5 L1232.0,510.5 L1235.0,513.8 L1238.0,517.3 L1241.0,520.8 L1244.0,524.3 L1247.0,527.7 L1250.0,530.7 L1253.0,533.3 L1256.0,535.5 L1259.0,537.2 L1262.0,538.3 L1265.0,538.9 L1268.0,539.0 L1271.0,538.7 L1274.0,538.1 L1277.0,537.1 L1280.0,536.0 L1283.0,534.9 L1286.0,533.8 L1289.0,532.8 L1292.0,532.0 L1295.0,531.6 L1298.0,531.5 L1301.0,531.7 L1304.0,532.3 L1307.0,533.3 L1310.0,534.5 L1313.0,535.9 L1316.0,537.5 L1319.0,539.0" class="env2"/>
+  <line x1="1030" y1="500.2" x2="1030" y2="566" class="dash"/>
+  <line x1="1044" y1="506.2" x2="1044" y2="566" class="dash"/>
+  <text x="1044" y="488" class="t12 b" dx="8">Δt par corrélation</text>
+
+  <text x="780" y="584" class="t13 i2">• Toutes les classes de signal sont mesurables, voix comprise.</text>
+  <text x="780" y="606" class="t13 i2">• Δt hors tolérance : mesure « désalignée », SSB exclue.</text>
+  <text x="780" y="628" class="t13 i2">• Étalonnage relatif préalable (campagne A/A) : écarts entre SDR corrigés.</text>
+
+</svg>

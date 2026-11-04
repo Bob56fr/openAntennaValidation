@@ -13,13 +13,17 @@ Comparer deux antennes « à l'oreille » ou sur quelques minutes ne prouve pres
 - Il compare **de 2 à 10 antennes**, toujours par rapport à une antenne de référence.
 - Il ne démodule rien : il mesure de la puissance dans la largeur de chaque signal.
 
+![Mesure dans le spectre : largeur de mesure de chaque classe de signal (porteuse, numérique étroit, SSB, AM), plancher de bruit pris dans les cases libres voisines, RSSI et SNR](schemas/mesure.svg)
+
 Bandes prévues : toutes les bandes radioamateur de 3 à 30 MHz, la CB (26 à 28 MHz), et les bandes de radiodiffusion 45 m et 85 m.
 
 ## Deux façons de comparer
 
 **Réception commutée** : un seul SDR à plusieurs entrées (par exemple le SDRplay RSP2 Pro, entrées A et B) bascule très vite d'une antenne à l'autre, plusieurs dizaines de fois par seconde. Le même récepteur mesure les deux antennes : pas d'écart de gain entre récepteurs. Un banc de qualification mesure ce que coûte chaque bascule ; certains signaux (la voix en SSB) varient trop vite pour ce mode, et le logiciel le dit.
 
-**Réception simultanée** : un SDR par antenne, tous à l'écoute au même instant. Toutes les classes de signal sont mesurables, mais les récepteurs doivent être **étalonnés ensemble** : une campagne « A/A » branche la même antenne sur tous les SDR par un splitter ; l'écart vrai est nul, ce qui reste est l'erreur de chaque récepteur, corrigée ensuite. Un test de charge vérifie que l'ordinateur suit avant chaque campagne.
+**Réception simultanée** : un SDR par antenne, tous à l'écoute au même instant. Toutes les classes de signal sont mesurables, mais les récepteurs doivent être **étalonnés entre eux en amont** : une campagne « A/A » branche la même antenne sur tous les SDR par un splitter ; l'écart vrai est nul, ce qui reste est l'écart relatif de chaque récepteur à celui de référence, corrigé ensuite dans les mesures. Un test de charge vérifie que l'ordinateur suit avant chaque campagne.
+
+![Réception commutée (un SDR, bascule rapide entre deux entrées, neutralisation après chaque bascule) et réception simultanée (un SDR par antenne, étalonnés entre eux en amont, flux alignés par corrélation)](schemas/acquisition.svg)
 
 ## Fréquences imposées ou bande automatique
 
@@ -32,6 +36,10 @@ On peut donner soi-même les fréquences à mesurer (une balise, une station de 
 - **Statistiques** : l'écart entre antennes est une médiane sur des fenêtres de temps ; son intervalle de confiance est calculé par **bootstrap par blocs**, parce que deux mesures voisines se ressemblent et qu'un calcul naïf serait trop optimiste. Au-delà de deux antennes, la **correction de Holm** évite de trouver par hasard des écarts entre certaines des 45 paires possibles.
 - **Règle de conclusion** : un écart n'est affirmé que s'il dépasse la marge de qualification **et** que l'intervalle de confiance exclut zéro. Sinon, la page le dit : « pas d'écart significatif ».
 - **Installation décrite** : hauteur, polarisation et orientation de chaque antenne, pertes de chaque câble, balun ou relais. La vue « Antenne » retire les pertes de la chaîne pour comparer les antennes elles-mêmes.
+
+![Qualification : banc matériel (générateur de bruit, splitter, atténuateur de 10 dB) et campagne A/A (écart vrai nul, marge = |biais| + 2σ, verdict par classe de signal)](schemas/qualification.svg)
+
+![De la mesure à la conclusion : mesures brutes, fenêtres de temps, écart à la référence, incertitude par bootstrap par blocs, règle de conclusion](schemas/conclusion.svg)
 
 ## Les résultats
 

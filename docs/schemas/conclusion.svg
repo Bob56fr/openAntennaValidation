@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 1546 1352 440" width="1352" height="440" role="img" aria-labelledby="title desc">
+  <title id="title">openAntennaValidation : principes de mesure</title>
+  <desc id="desc">Schéma en quatre parties : réception commutée et réception simultanée ; mesure du niveau, du plancher de bruit et du SNR dans la largeur de chaque classe de signal ; qualification par banc matériel et campagne A/A ; chaîne statistique jusqu'à la règle de conclusion.</desc>
+  <style>
+    svg { --bg:#f2f3f0; --surface:#fcfcfb; --surface-2:#f6f7f4; --ink:#121512; --ink-2:#4b514c; --muted:#7d837d;
+          --line:#e1e2dc; --axis:#c3c5bd; --zone:rgba(125,131,125,.14);
+          --good:#0ca30c; --warning:#fab219; --critical:#d03b3b; --good-ink:#006300;
+          --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s7:#6250d6; }
+    @media (prefers-color-scheme: dark) {
+      svg { --bg:#0e100e; --surface:#181a18; --surface-2:#1e211e; --ink:#eef0ec; --ink-2:#c0c4bc; --muted:#8a8e88;
+            --line:#2b2e2b; --axis:#3b3e3a; --zone:rgba(138,142,136,.16); --good-ink:#3cc23c;
+            --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s7:#9085e9; }
+    }
+    text { font-family: "IBM Plex Sans", system-ui, "Segoe UI", sans-serif; fill: var(--ink); }
+    .bg { fill: var(--bg); }
+    .panel { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+    .box { fill: var(--surface-2); stroke: var(--axis); stroke-width: 1.2; }
+    .wire { fill: none; stroke: var(--ink-2); stroke-width: 1.6; }
+    .axis { stroke: var(--axis); stroke-width: 1.2; fill: none; }
+    .grid { stroke: var(--line); stroke-width: 1; }
+    .bracket { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+    .dash { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 4 3; fill: none; }
+    .ant1 { fill: none; stroke: var(--s1); stroke-width: 2.4; stroke-linecap: round; }
+    .ant2 { fill: none; stroke: var(--s2); stroke-width: 2.4; stroke-linecap: round; }
+    .ant3 { fill: none; stroke: var(--s3); stroke-width: 2.4; stroke-linecap: round; }
+    .mk1 { fill: var(--s1); } .mk2 { fill: var(--s2); } .mk3 { fill: var(--s3); }
+    .fa { fill: var(--s1); } .fb { fill: var(--s2); }
+    .onfill { fill: #fff; }
+    .env1 { fill: none; stroke: var(--s1); stroke-width: 2.2; stroke-linejoin: round; }
+    .env2 { fill: none; stroke: var(--s2); stroke-width: 2.2; stroke-dasharray: 7 3; stroke-linejoin: round; }
+    .spec { fill: none; stroke: var(--ink-2); stroke-width: 1.4; stroke-linejoin: round; }
+    .specfill { fill: url(#specgrad); }
+    .meas { fill: var(--s1); fill-opacity: .13; stroke: var(--s1); stroke-opacity: .55; stroke-width: 1; stroke-dasharray: 3 3; }
+    .floor { stroke: var(--s3); stroke-width: 2; stroke-dasharray: 6 4; }
+    .calib { fill: none; stroke: var(--s7); stroke-width: 1.4; stroke-dasharray: 5 4; }
+    .hist { fill: var(--s7); fill-opacity: .75; }
+    .zone { fill: var(--zone); }
+    .ci { stroke: var(--s1); stroke-width: 2.2; stroke-linecap: round; }
+    .pt { fill: var(--s1); stroke: var(--surface); stroke-width: 2; }
+    .arrow { stroke: var(--ink-2); stroke-width: 1.4; fill: none; marker-end: url(#arr); }
+    .arrowb { stroke: var(--ink-2); stroke-width: 1.4; fill: none; marker-end: url(#arr); marker-start: url(#arrs); }
+    .num { fill: var(--ink); }
+    .numt { fill: var(--surface); font-weight: 600; font-size: 14px; text-anchor: middle; }
+    .h1 { font-size: 34px; font-weight: 600; letter-spacing: -.01em; }
+    .h2 { font-size: 21px; font-weight: 600; }
+    .h3 { font-size: 17px; font-weight: 600; }
+    .eyebrow { font-family: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif; font-weight: 600; font-size: 12px; letter-spacing: .08em; fill: var(--muted); }
+    .sub { font-size: 16px; fill: var(--ink-2); }
+    .t11 { font-size: 11px; } .t12 { font-size: 12px; } .t13 { font-size: 13px; } .t14 { font-size: 14px; } .t15 { font-size: 15px; }
+    .b { font-weight: 600; } .m { fill: var(--muted); } .i2 { fill: var(--ink-2); }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+    .mid { text-anchor: middle; } .end { text-anchor: end; }
+    .c1 { fill: var(--s1); } .c2 { fill: var(--s2); } .c3 { fill: var(--s3); } .c7 { fill: var(--s7); }
+    .good { fill: var(--good-ink); }
+    .tag { fill: var(--surface-2); stroke: var(--line); }
+    .dot-good { fill: var(--good); } .dot-warn { fill: var(--warning); } .dot-crit { fill: var(--critical); }
+  </style>
+  <defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="#ffffff" fill-opacity=".55"/>
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#121512" stroke-opacity=".45" stroke-width="2"/>
+    </pattern>
+    <pattern id="hatchn" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#1baf7a" stroke-opacity=".6" stroke-width="1.5"/>
+    </pattern>
+    <linearGradient id="specgrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7d837d" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#7d837d" stop-opacity=".02"/>
+    </linearGradient>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,1 L9,5 L0,9 z" fill="#7d837d"/>
+    </marker>
+    <marker id="arrs" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M10,1 L1,5 L10,9 z" fill="#7d837d"/>
+    </marker>
+    <path id="antenna" d="M0,0 V-30 M0,-30 L-13,-46 M0,-30 L13,-46 M0,-30 V-48"/>
+  </defs>
+
+  <rect class="bg" x="24" y="1546" width="1352" height="440" rx="12"/>
+  <text x="48" y="1583" class="h2">De la mesure à la conclusion</text>
+
+  <rect x="48" y="1602" width="1304" height="370" rx="10" class="panel"/>
+
+  <rect x="72" y="1626" width="232" height="132" rx="8" class="box"/>
+  <text x="88" y="1650" class="eyebrow">ÉTAPE 1</text>
+  <text x="88" y="1672" class="t15 b">Mesures brutes</text>
+  <text x="88" y="1694" class="t13 i2">Horodatées, jamais modifiées.</text>
+  <text x="88" y="1712" class="t13 i2">Saturation, perte de flux,</text>
+  <text x="88" y="1730" class="t13 i2">chevauchement : exclues</text>
+  <text x="88" y="1748" class="t13 i2">et comptées.</text>
+
+  <path d="M308,1692 H322" class="arrow"/>
+  <rect x="328" y="1626" width="232" height="132" rx="8" class="box"/>
+  <text x="344" y="1650" class="eyebrow">ÉTAPE 2</text>
+  <text x="344" y="1672" class="t15 b">Fenêtres de temps</text>
+  <text x="344" y="1694" class="t13 i2 mono">10 s · 1 min · 5 min · 15 min</text>
+  <text x="344" y="1712" class="t13 i2">selon la durée de campagne ;</text>
+  <text x="344" y="1730" class="t13 i2">médiane, p10, p90 par signal</text>
+  <text x="344" y="1748" class="t13 i2">et par antenne.</text>
+
+  <path d="M564,1692 H578" class="arrow"/>
+  <rect x="584" y="1626" width="232" height="132" rx="8" class="box"/>
+  <text x="600" y="1650" class="eyebrow">ÉTAPE 3</text>
+  <text x="600" y="1672" class="t15 b">Écart à la référence</text>
+  <text x="600" y="1694" class="t13 i2">Δ = antenne − référence,</text>
+  <text x="600" y="1712" class="t13 i2">apparié mesure à mesure.</text>
+  <text x="600" y="1730" class="t13 i2">Corrections recalculables :</text>
+  <text x="600" y="1748" class="t13 i2">profil, pertes des câbles.</text>
+
+  <path d="M820,1692 H834" class="arrow"/>
+  <rect x="840" y="1626" width="232" height="132" rx="8" class="box"/>
+  <text x="856" y="1650" class="eyebrow">ÉTAPE 4</text>
+  <text x="856" y="1672" class="t15 b">Incertitude</text>
+  <text x="856" y="1694" class="t13 i2">IC à 95 % par bootstrap</text>
+  <text x="856" y="1712" class="t13 i2">par blocs (mesures corrélées).</text>
+  <text x="856" y="1730" class="t13 i2">Correction de Holm : jusqu'à</text>
+  <text x="856" y="1748" class="t13 i2">45 paires pour 10 antennes.</text>
+
+  <path d="M1076,1692 H1090" class="arrow"/>
+  <rect x="1096" y="1626" width="232" height="132" rx="8" fill="var(--surface)" stroke="var(--s1)" stroke-width="1.8"/>
+  <text x="1112" y="1650" class="eyebrow">ÉTAPE 5</text>
+  <text x="1112" y="1672" class="t15 b">Règle de conclusion</text>
+  <text x="1112" y="1694" class="t13 i2">Écart affirmé seulement si</text>
+  <text x="1112" y="1712" class="t13 b">|Δ| > marge de qualification</text>
+  <text x="1112" y="1730" class="t13 b">et IC excluant zéro.</text>
+  <text x="1112" y="1748" class="t13 i2">Sinon : pas d'écart significatif.</text>
+
+  <!-- forest plot -->
+  <rect x="672" y="1784" width="176" height="128" class="zone"/>
+  <text x="760" y="1798" class="t11 m mid">marge de qualification</text>
+  <line x1="760" y1="1802" x2="760" y2="1912" class="dash"/>
+  <line x1="430" y1="1912" x2="1090" y2="1912" class="axis"/>
+  <line x1="430" y1="1912" x2="430" y2="1917" class="axis"/>
+    <text x="430" y="1933" class="t12 m mid mono">−3</text>
+    <line x1="540" y1="1912" x2="540" y2="1917" class="axis"/>
+    <text x="540" y="1933" class="t12 m mid mono">−2</text>
+    <line x1="650" y1="1912" x2="650" y2="1917" class="axis"/>
+    <text x="650" y="1933" class="t12 m mid mono">−1</text>
+    <line x1="760" y1="1912" x2="760" y2="1917" class="axis"/>
+    <text x="760" y="1933" class="t12 m mid mono">0</text>
+    <line x1="870" y1="1912" x2="870" y2="1917" class="axis"/>
+    <text x="870" y="1933" class="t12 m mid mono">+1</text>
+    <line x1="980" y1="1912" x2="980" y2="1917" class="axis"/>
+    <text x="980" y="1933" class="t12 m mid mono">+2</text>
+    <line x1="1090" y1="1912" x2="1090" y2="1917" class="axis"/>
+    <text x="1090" y="1933" class="t12 m mid mono">+3</text>
+  <text x="72" y="1813" class="t13 b">Dipôle − verticale · nuit</text>
+    <text x="72" y="1829" class="t12 m">porteuses, 40 m</text>
+    <line x1="881.0" y1="1808" x2="991.0" y2="1808" class="ci"/>
+    <line x1="881.0" y1="1802" x2="881.0" y2="1814" class="ci"/>
+    <line x1="991.0" y1="1802" x2="991.0" y2="1814" class="ci"/>
+    <circle cx="936.0" cy="1808" r="6" class="pt"/>
+    <text x="1110" y="1813" class="t13 good b">Écart significatif : +1,6 dB</text>
+    <text x="72" y="1853" class="t13 b">Dipôle − verticale · jour</text>
+    <text x="72" y="1869" class="t12 m">porteuses, 40 m</text>
+    <line x1="705.0" y1="1848" x2="881.0" y2="1848" class="ci"/>
+    <line x1="705.0" y1="1842" x2="705.0" y2="1854" class="ci"/>
+    <line x1="881.0" y1="1842" x2="881.0" y2="1854" class="ci"/>
+    <circle cx="793.0" cy="1848" r="6" class="pt"/>
+    <text x="1110" y="1853" class="t13 m">Pas d'écart : l'intervalle contient zéro</text>
+    <text x="72" y="1893" class="t13 b">Dipôle − verticale · jour</text>
+    <text x="72" y="1909" class="t12 m">SSB, 40 m</text>
+    <line x1="787.5" y1="1888" x2="831.5" y2="1888" class="ci"/>
+    <line x1="787.5" y1="1882" x2="787.5" y2="1894" class="ci"/>
+    <line x1="831.5" y1="1882" x2="831.5" y2="1894" class="ci"/>
+    <circle cx="809.5" cy="1888" r="6" class="pt"/>
+    <text x="1110" y="1893" class="t13 m">Pas d'écart : sous la marge</text>
+  <text x="760" y="1956" class="t12 m mid">écart en dB, médiane et intervalle de confiance à 95 % · valeurs illustratives</text>
+
+</svg>
