@@ -1,10 +1,10 @@
-# Cahier des charges — openDualSDR, comparateur d'antennes HF par RSSI et SNR
+# Cahier des charges — openAntennaValidation, comparateur d'antennes HF par RSSI et SNR
 
 Nov 3, 2026 · @Kriss
 
 ## 1. Contexte et objectifs
 
-openDualSDR compare les performances de réception de deux à dix antennes en mesurant, sur une même station et pendant une même période, le niveau reçu (RSSI), le plancher de bruit et le rapport signal sur bruit (SNR) des signaux présents dans une bande HF. Les campagnes durent de 1 minute à 1 mois. Les résultats sont consultables sur une page web locale et, si l'opérateur le souhaite, publiés sur un site WordPress commun à plusieurs opérateurs.
+openAntennaValidation compare les performances de réception de deux à dix antennes en mesurant, sur une même station et pendant une même période, le niveau reçu (RSSI), le plancher de bruit et le rapport signal sur bruit (SNR) des signaux présents dans une bande HF. Les campagnes durent de 1 minute à 1 mois. Les résultats sont consultables sur une page web locale et, si l'opérateur le souhaite, publiés sur un site WordPress commun à plusieurs opérateurs.
 
 Objectifs mesurables :
 
@@ -148,10 +148,10 @@ Les modules suivants sont copiés puis adaptés. On extraira une bibliothèque c
 ### Arborescence attendue
 
 ```
-openDualSDR/
-  src/open_dual_sdr/   # modules ci-dessus
+openAntennaValidation/
+  src/open_antenna_validation/   # modules ci-dessus
   web/                 # page locale (et sources du front-end partagé)
-  wordpress/open-dual-sdr/
+  wordpress/open-antenna-validation/
   tests/
   install/windows/
   install/linux/
@@ -658,7 +658,7 @@ Le plugin reçoit les agrégats de plusieurs stations et les présente au public
 
 ### API d'ingestion
 
-- `POST /wp-json/open-dual-sdr/v1/ingest`, avec repli automatique sur `?rest_route=`. Authentification par jeton propre à la station, envoyé aussi dans un en-tête dédié.
+- `POST /wp-json/open-antenna-validation/v1/ingest`, avec repli automatique sur `?rest_route=`. Authentification par jeton propre à la station, envoyé aussi dans un en-tête dédié.
 - Lots compressés en gzip, envoyés en `Content-Type: application/gzip` (constat D14 d'openAISReceiver), taille limitée par requête.
 - Contenu :
   - campagne : métadonnées, installation, segments, profil de qualification résumé ;
