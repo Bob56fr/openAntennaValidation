@@ -118,3 +118,17 @@ def test_pages_and_api_work_without_sdr(
     finally:
         s.shutdown()
         s.db.close()
+
+
+def test_every_page_links_every_tab() -> None:
+    """The navigation is copied in each page: no tab left disabled from an earlier phase."""
+    from pathlib import Path
+
+    web = Path(__file__).resolve().parents[1] / "web"
+    for name in ("index.html", "campaigns.html", "campaign.html", "new-campaign.html",
+                 "qualification.html", "installation.html"):
+        html = (web / name).read_text(encoding="utf-8")
+        assert 'class="soon"' not in html, name
+        for href in ('href="/"', 'href="/campaigns"', 'href="/qualification"',
+                     'href="/installation"'):
+            assert href in html, (name, href)
