@@ -78,8 +78,10 @@ function renderStatus(report) {
   if (report.gain_index != null) gain.value = String(report.gain_index);
   // Fréquence
   if (document.activeElement !== $("freq") && report.center_hz) $("freq").value = (report.center_hz / 1000).toFixed(1);
-  // Sans récepteur, les commandes n'ont rien à piloter.
-  document.querySelectorAll("#antenna-seg button, #gain, #band, #freq-form button").forEach((el) => { el.disabled = !live; });
+  renderCampaign(report.campaign);
+  // Sans récepteur, ou pendant une campagne, les commandes manuelles n'ont rien à piloter.
+  const free = live && !report.campaign;
+  document.querySelectorAll("#antenna-seg button, #gain, #band, #freq-form button").forEach((el) => { el.disabled = !free; });
   renderBandNote();
 }
 
@@ -96,6 +98,43 @@ function renderBandNote() {
   }
   $("band-note").textContent = text;
 }
+
+const fmtWhen = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+function duration(ms) {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return h < 48 ? `${h} h ${String(m % 60).padStart(2, "0")}` : `${Math.floor(h / 24)} j ${h % 24} h`;
+}
+function renderCampaign(c) {
+  const has = !!c;
+  ["camp-pill", "camp-results", "camp-stop", "camp-bar"].forEach((id) => { $(id).hidden = !has; });
+  $("camp-new").hidden = has;
+  if (!has) {
+    $("camp-eyebrow").textContent = "Campagne";
+    $("camp-title").textContent = "Aucune campagne en cours";
+    $("camp-meta").innerHTML = `<a class="linkbtn" href="/campaigns">Voir les campagnes enregistrées</a>`;
+    $("camp-confirm").hidden = true;
+    return;
+  }
+  const now = c.last_ms || Date.now();
+  const total = c.planned_end_ms - c.start_ms;
+  const done = Math.min(1, Math.max(0, (now - c.start_ms) / total));
+  const state = c.state === "interrupted" ? ["Interrompue", "bad"] : c.calm ? ["Bande calme", ""] : ["Bande active", "ok"];
+  $("camp-eyebrow").textContent = `Campagne en cours${c.aa ? " · A/A" : ""} · mode commuté`;
+  $("camp-title").textContent = c.title;
+  $("camp-pill").className = `pill ${state[1]}`; $("camp-word").textContent = state[0];
+  $("camp-results").href = `/campaign?id=${encodeURIComponent(c.uuid)}`;
+  $("camp-progress").style.width = `${Math.round(done * 100)}%`;
+  $("camp-meta").innerHTML = `<span>${c.signals} fréquence${c.signals > 1 ? "s" : ""} · commutation ${c.rate_hz} Hz</span>
+    <span>${Math.round(done * 100)} % · ${duration(now - c.start_ms)} écoulées, reste ${duration(c.planned_end_ms - now)}</span>
+    <span>Fin prévue ${fmtWhen.format(c.planned_end_ms)}</span>`;
+}
+$("camp-stop").addEventListener("click", () => { $("camp-confirm").hidden = false; });
+$("camp-stop-no").addEventListener("click", () => { $("camp-confirm").hidden = true; });
+$("camp-stop-yes").addEventListener("click", async () => {
+  try { await api("/api/campaign/stop", {}); $("camp-confirm").hidden = true; renderStatus(await api("/api/hardware")); } catch (err) { showError(err.message); }
+});
 
 $("antenna-seg").addEventListener("click", async (e) => {
   const b = e.target.closest("button");

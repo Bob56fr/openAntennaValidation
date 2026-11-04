@@ -174,7 +174,6 @@ class Station:
         if run is None or self.receiver.get("state") != "running":
             return
         self._send("campaign_start", cm.engine_spec(run, self.config))
-        run.engine_started = True
         if run.interrupted_since is not None:
             run.interrupted_since = None
             run.calm = False
@@ -182,6 +181,8 @@ class Station:
             cm.switch_activity(self.db, run, "active", now_ms())
             with self.db.transaction() as conn:
                 conn.execute("UPDATE campaigns SET state = 'running' WHERE id = ?", (run.id,))
+        # Last: whoever sees the engine started sees the campaign running in the database.
+        run.engine_started = True
 
     def start_campaign(self, request: dict[str, Any]) -> str:
         with self._campaign_lock:

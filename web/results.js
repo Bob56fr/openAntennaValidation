@@ -58,9 +58,10 @@ const solarClass = (el) => (el > 10 ? "jour" : el < -6 ? "nuit" : "crep");
 const CLASS_LABEL = { jour: "Jour", crep: "Crépuscule", nuit: "Nuit" };
 
 /* ---------- Données ---------- */
-const CLASSES = ["carrier", "digital", "ssb"];
-const CLASS_NAME = { all: "toutes classes", carrier: "porteuses et CW", digital: "signaux numériques", ssb: "SSB" };
-const CLASS_SHORT = { carrier: "CW", digital: "Num.", ssb: "SSB" };
+const CLASSES = ["carrier", "digital", "ssb", "am_fm"];
+const CLASS_NAME = { all: "toutes classes", carrier: "porteuses et CW", digital: "signaux numériques", ssb: "SSB", am_fm: "AM et FM" };
+const CLASS_SHORT = { carrier: "CW", digital: "Num.", ssb: "SSB", am_fm: "AM/FM" };
+const CLASS_TITLE = { carrier: "Porteuses et CW", digital: "Signaux numériques", ssb: "SSB", am_fm: "AM et FM" };
 const SYMBOL = ["circle", "rect", "triangle", "diamond", "roundRect", "pin"];
 let R, ANTS, WINS, CL, STATION, TZ, fmtDay, fmtDayHour, EOT_MID, DEC_MID, NWIN, STEP, START;
 const state = { metric: "rssi", view: "installation", cls: "all", ref: 0, cmp: 1, pairsPeriod: "jour" };
@@ -104,7 +105,11 @@ const tzOffsetH = (ts) => {
 };
 const solarToLocal = (h) => h - STATION.lon / 15 - EOT_MID / 60 + tzOffsetH(START + NWIN * STEP / 2);
 const lossOf = (a, i) => R.segments.length ? (R.segments[WINS[i].seg].chains[a.k] || { loss_db: 0 }).loss_db : 0;
-const margin = () => { const m = R.campaign.margins || {}; return m[state.cls] ?? m.all ?? 0.5; };
+// Marge de qualification de la classe ; 0 quand elle est inconnue (pas de campagne A/A) :
+// seul l'intervalle de confiance décide alors, et la page le dit.
+const marginKnown = () => Object.keys(R.campaign.margins || {}).length > 0;
+const margin = () => { const m = R.campaign.margins || {}; return m[state.cls] ?? m.all ?? 0; };
+const marginText = () => (marginKnown() ? `marge ±${f1(margin())} dB` : "marge inconnue");
 
 function rawValue(rssi, floor, a, i, metric, view) {
   if (metric === "snr") return rssi == null || floor == null ? null : rssi - floor;
@@ -141,7 +146,15 @@ function baseOpt(t) {
 }
 const axisCommon = (t) => ({ axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { color: t.muted, fontSize: 11.5 },
   splitLine: { lineStyle: { color: t.line, width: 1 } }, nameTextStyle: { color: t.muted, fontSize: 11.5 } });
-const timeLabel = (v) => { const d = new Date(v); const h = +new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(d) % 24; return h === 0 ? fmtDay.format(d) : `${h} h`; };
+// Axe du temps : le jour à minuit, l'heure sinon ; les minutes pour une campagne courte.
+const timeLabel = (v) => {
+  const d = new Date(v);
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "numeric", minute: "2-digit", hourCycle: "h23" }).formatToParts(d);
+  const h = +parts.find((x) => x.type === "hour").value % 24, m = parts.find((x) => x.type === "minute").value;
+  if (NWIN * STEP < 2 * 864e5) return `${h} h ${m}`;
+  return h === 0 && m === "00" ? fmtDay.format(d) : `${h} h`;
+};
+const windowText = () => (STEP >= 60000 ? `${Math.round(STEP / 60000)} min` : `${Math.round(STEP / 1000)} s`);
 
 /* ---------- Bandes jour / nuit ---------- */
 function nightAreasTime(t) {
@@ -198,7 +211,7 @@ const ICON = {
 function phrase(cmpA, refA, s, m, metric = state.metric) {
   const cmp = `${cmpA.short} (${cmpA.id})`, ref = `${refA.short} (${refA.id})`;
   if (!s) return "pas de mesure";
-  if (Math.abs(s.med) <= Math.max(m, s.ci)) return `pas d'écart significatif entre ${cmp} et ${ref} (${s1(s.med)} dB, marge ±${f1(m)} dB)`;
+  if (Math.abs(s.med) <= Math.max(m, s.ci)) return `pas d'écart significatif entre ${cmp} et ${ref} (${s1(s.med)} dB, ${marginText()})`;
   const abs = f1(Math.abs(s.med));
   if (metric === "rssi") return `${cmp} reçoit ${abs} dB de ${s.med > 0 ? "plus" : "moins"} que ${ref}`;
   if (metric === "snr") return `${cmp} a un SNR ${s.med > 0 ? "meilleur" : "moins bon"} de ${abs} dB que ${ref}`;
@@ -208,7 +221,8 @@ const significant = (s, m) => s && Math.abs(s.med) > Math.max(m, s.ci);
 function renderSummary() {
   const ref = ANTS[state.ref], cmp = ANTS[state.cmp], m = margin();
   const bc = byClass(cmp, ref), prof = profile(cmp, ref);
-  let main = `De jour, ${phrase(cmp, ref, bc.jour, m)} (±${f1(bc.jour?.ci)} dB). La nuit, ${phrase(cmp, ref, bc.nuit, m)} (±${f1(bc.nuit?.ci)} dB).`;
+  const period = (label, s) => (s ? `${label}, ${phrase(cmp, ref, s, m)} (±${f1(s.ci)} dB).` : `${label}, pas encore de mesure.`);
+  let main = `${period("De jour", bc.jour)} ${period("La nuit", bc.nuit)}`;
   const xs = crossings(prof);
   if (xs.length && significant(bc.jour, m) && significant(bc.nuit, m) && (bc.jour.med > 0) !== (bc.nuit.med > 0)) {
     main += ` L'écart change de signe vers ${xs.map((x) => hm(solarToLocal(x))).join(" et ")}, heure locale.`;
@@ -232,7 +246,7 @@ function renderSummary() {
   $("tiles").innerHTML = `
     <div class="tile"><div class="label">Écart de jour</div><div class="value">${s1(bc.jour?.med)} <small>dB</small></div><div class="sub">${cmp.id} − ${ref.id} · IC 95 % ±${f1(bc.jour?.ci)}</div>${chip(bc.jour)}</div>
     <div class="tile"><div class="label">Écart de nuit</div><div class="value">${s1(bc.nuit?.med)} <small>dB</small></div><div class="sub">${cmp.id} − ${ref.id} · IC 95 % ±${f1(bc.nuit?.ci)}</div>${chip(bc.nuit)}</div>
-    <div class="tile"><div class="label">${cmp.id} ${word}</div><div class="value">${NF0.format(pct)} <small>% du temps</small></div><div class="sub">Sur ${NF0.format(deltas.length)} fenêtres de ${Math.round(STEP / 60000)} min</div></div>
+    <div class="tile"><div class="label">${cmp.id} ${word}</div><div class="value">${NF0.format(pct)} <small>% du temps</small></div><div class="sub">Sur ${NF0.format(deltas.length)} fenêtres de ${windowText()}</div></div>
     <div class="tile"><div class="label">Bande calme</div><div class="value">${f1(calmPct)} <small>%</small></div><div class="sub">Bruit seul mesuré pendant ces périodes</div></div>`;
 }
 
@@ -280,7 +294,7 @@ function renderProfile(t) {
   chart("c-profile").setOption(o, true);
   $("key-profile").innerHTML = others.map((a) => `<span>${dot(colorOf(a))}${a.id} − ${ref.id}${ANTS.length > 2 ? "" : ` (${a.short} − ${ref.short})`}</span>`).join("")
     + `<span><i class="sw" style="background:${t.night}"></i>Nuit</span><span><i class="sw" style="background:${t.twilight}"></i>Crépuscule</span>`
-    + `<span><i class="sw" style="background:${t.margin}"></i>Marge de qualification ±${f1(m)} dB</span>`
+    + (marginKnown() ? `<span><i class="sw" style="background:${t.margin}"></i>Marge de qualification ±${f1(m)} dB</span>` : `<span>Marge de qualification inconnue</span>`)
     + `<span><i class="sw" style="background:${hexA(colorOf(cmp), 0.16)}"></i>p10–p90 (${cmp.id})</span>`;
   $("t-profile").textContent = `Écart de ${metricWord()} sur 24 heures`;
   $("d-profile").textContent = ANTS.length > 2
@@ -407,12 +421,14 @@ function renderDeltaTS(t) {
   chart("c-dts").setOption(o, true);
   $("t-dts").textContent = `Écart de ${metricWord()} mesuré`;
   const segNote = R.segments.slice(1).map((s) => s.reason).filter(Boolean).join(" ; ");
-  $("d-dts").textContent = `${cmp.id} − ${ref.id} par fenêtre de ${Math.round(STEP / 60000)} min, avec la marge de qualification.${segNote && state.view === "installation" && state.metric !== "snr" ? ` ${segNote} : en vue Installation la courbe se décale, la vue Antenne le compense.` : ""}`;
+  $("d-dts").textContent = `${cmp.id} − ${ref.id} par fenêtre de ${windowText()}${marginKnown() ? ", avec la marge de qualification" : ""}.${segNote && state.view === "installation" && state.metric !== "snr" ? ` ${segNote} : en vue Installation la courbe se décale, la vue Antenne le compense.` : ""}`;
 }
 
 function renderLevels(t) {
   const ref = ANTS[state.ref], cmp = ANTS[state.cmp];
-  const per = Math.max(1, Math.round(3_600_000 / STEP));
+  // Une moyenne par heure sur une longue campagne, moins sur une courte (au moins ~60 points).
+  const per = Math.max(1, Math.min(Math.round(3_600_000 / STEP), Math.floor(NWIN / 60)));
+  const perText = per * STEP >= 3_600_000 ? "Moyenne horaire" : per === 1 ? `Médiane par fenêtre de ${windowText()}` : `Moyenne par ${Math.round(per * STEP / 60000)} min`;
   const series = [{ type: "line", data: [], silent: true, markArea: { silent: true, data: [...nightAreasTime(t), ...calmAreas(t)] } }];
   const sel = {};
   ANTS.forEach((a) => {
@@ -432,13 +448,13 @@ function renderLevels(t) {
   o.yAxis = { type: "value", scale: true, ...axisCommon(t), axisLabel: { color: t.muted, formatter: (v) => f1(v).replace(",0", "") }, name: unitOf(), nameGap: 10 };
   o.tooltip = { ...o.tooltip, trigger: "axis", axisPointer: { type: "line", lineStyle: { color: t.axis } }, formatter: (ps) => {
     const rows = ps.filter((p) => p.seriesIndex > 0); if (!rows.length) return "";
-    let s = `<b>${fmtDayHour.format(rows[0].value[0])}</b> (moyenne horaire)<br>`;
+    let s = `<b>${fmtDayHour.format(rows[0].value[0])}</b> (${perText.toLowerCase()})<br>`;
     rows.forEach((p) => { s += `${dot(p.color)}${p.seriesName} : <b>${p.value[1] == null ? "bande calme" : `${f1(p.value[1])} ${unitOf()}`}</b><br>`; });
     return s; } };
   o.series = series;
   chart("c-lvl").setOption(o, true);
   $("t-lvl").textContent = state.metric === "noise" ? "Plancher de bruit" : state.metric === "snr" ? "SNR" : "Niveaux reçus";
-  $("d-lvl").textContent = `Moyenne horaire, ${CLASS_NAME[state.cls]}, vue ${state.view === "antenne" ? "Antenne (au pied d'antenne)" : "Installation (au SDR)"}.${ANTS.length > 2 ? " Cliquez sur la légende pour afficher d'autres antennes." : ""}`;
+  $("d-lvl").textContent = `${perText}, ${CLASS_NAME[state.cls]}, vue ${state.view === "antenne" ? "Antenne (au pied d'antenne)" : "Installation (au SDR)"}.${ANTS.length > 2 ? " Cliquez sur la légende pour afficher d'autres antennes." : ""}`;
 }
 
 function renderSignals(t) {
@@ -496,12 +512,14 @@ function renderStatic() {
   document.title = `${c.title} · openAntennaValidation`;
   $("head-eyebrow").textContent = `${STATE_WORD[c.state] || c.state} · ${MODE_WORD[c.reception_mode] || c.reception_mode} · ${c.measure_mode === "auto" ? "bande automatique" : "fréquences imposées"}`;
   $("head-title").innerHTML = `${c.title} <span class="freq">${(c.low_hz / 1e6).toFixed(3).replace(".", ",")}–${(c.high_hz / 1e6).toFixed(3).replace(".", ",")} MHz</span>`;
-  const days = Math.round((c.end_ms - c.start_ms) / 864e5 * 10) / 10;
+  const endMs = c.end_ms || c.planned_end_ms;
+  const days = Math.round((endMs - c.start_ms) / 864e5 * 10) / 10;
   const m = c.margins || {};
   $("head-meta").innerHTML = `<span>Opérateur <b>${c.operator}</b>${c.locator ? ` · ${c.locator}` : ""}</span>
-    <span><b>${fmtDay.format(c.start_ms)} → ${fmtDay.format(c.end_ms)}</b> · ${NF1.format(days).replace(",0", "")} jours</span>
+    <span><b>${fmtDay.format(c.start_ms)} → ${fmtDay.format(endMs)}</b>${c.end_ms ? "" : " (prévu)"} · ${days >= 1 ? `${NF1.format(days).replace(",0", "")} jours` : `${Math.round((endMs - c.start_ms) / 60000)} min`}</span>
     <span>${c.sdr}</span><span>${c.band} · ${R.signals.length} signaux</span>
-    ${c.qualification ? `<span class="qual-chip">${ICON.check} Qualifiée, marge ±${f1(m.all)} dB</span>` : `<span class="qual-chip">${ICON.dash} Non qualifiée</span>`}`;
+    ${c.aa ? `<span class="qual-chip">Campagne A/A</span>` : ""}
+    ${c.qualification ? `<span class="qual-chip">${ICON.check} Qualifiée${marginKnown() ? `, marge ±${f1(m.all)} dB` : ""}</span>` : `<span class="qual-chip">${ICON.dash} Non qualifiée</span>`}`;
   $("time-sub").textContent = `Heure locale de la station (${TZ}). Nuits ombrées, bande calme en gris.`;
   $("inst-sub").textContent = `Pertes de la chaîne sur ${c.band}. La vue « Antenne » les ajoute aux niveaux mesurés.`;
   const chainText = (ch) => `${ch.elements.map((e) => `${e.label} (${f1(e.db)} dB)`).join(" + ")} · <b>${f1(ch.loss_db)} dB</b>`;
@@ -516,7 +534,15 @@ function renderStatic() {
   }).join("");
   $("coupling-note").textContent = `${c.spacing_note || ""} Des antennes proches s'influencent : les résultats décrivent chaque antenne dans cette installation, pas l'antenne seule.`.trim();
   const q = c.qualification;
-  if (q) {
+  if (q && q.kind === "bench") {
+    const fmtDate = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+    $("d-qual").textContent = `Banc de commutation${q.date_ms ? ` du ${fmtDate.format(q.date_ms)}` : ""} : neutralisation ${f1(q.blanking_ms)} ms après chaque bascule, temps utile ${Math.round((q.useful || 0) * 100)} % à la cadence de la campagne.${marginKnown() ? " Marges mesurées par une campagne A/A." : " Marges en dB inconnues tant qu'aucune campagne A/A n'a été faite."}`;
+    const icon = { ok: ICON.check, warn: ICON.warn, bad: ICON.warn };
+    $("qual-list").innerHTML = (q.verdicts || []).map((v) => {
+      const mg = (c.margins || {})[v.class];
+      return `<li>${icon[v.state] || ICON.dash}<span>${CLASS_TITLE[v.class] || v.class}${v.useful != null ? ` : temps utile ${Math.round(v.useful * 100)} %` : ""}</span><span class="m">${mg != null ? `±${f1(mg)} dB` : "—"}</span></li>`;
+    }).join("");
+  } else if (q) {
     $("d-qual").textContent = `Campagne A/A du ${q.date}, ${q.duration}, une antenne sur toutes les voies via un splitter. Biais résiduel ${q.bias}, alignement temporel ${NF1.format(q.alignment_ms)} ms.`;
     $("qual-list").innerHTML = `
       <li>${ICON.check}<span>Porteuses et CW</span><span class="m">±${f1(m.carrier)} dB</span></li>

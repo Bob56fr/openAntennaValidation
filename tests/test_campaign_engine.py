@@ -194,3 +194,12 @@ def test_campaign_resumes_after_a_restart(station_home: Path) -> None:
     finally:
         s2.shutdown()
         s2.db.close()
+
+
+def test_campaign_pages_are_served(client: TestClient) -> None:
+    assert client.get("/campaigns/new").status_code == 200
+    for asset in ("new-campaign.js", "installation.js", "results.js"):
+        assert client.get(f"/static/{asset}").status_code == 200
+    setup = client.get("/api/campaign/setup").json()
+    assert setup["rate_hz"] == 25.0 and setup["disk_free_bytes"] > 0
+    assert set(setup["class_width_hz"]) == {"carrier", "digital", "ssb", "am_fm"}

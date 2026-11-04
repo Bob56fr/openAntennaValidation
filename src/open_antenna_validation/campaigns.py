@@ -143,6 +143,7 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
             "uuid": c["uuid"], "title": c["title"], "band": c["band"], "low_hz": c["low_hz"],
             "high_hz": c["high_hz"], "state": c["state"], "reception_mode": c["reception_mode"],
             "measure_mode": c["measure_mode"], "start_ms": c["start_ms"], "end_ms": c["end_ms"],
+            "planned_end_ms": c["planned_end_ms"], "aa": bool(params.get("aa")),
             "n_channels": n_ch, "reference_channel": c["reference_channel"],
             "demo": bool(params.get("demo")), "sdr": params.get("sdr", ""),
             "operator": params.get("operator", c["callsign"]), "locator": params.get("locator", ""),

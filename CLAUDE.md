@@ -46,8 +46,8 @@ Pièges Windows : PowerShell 5.1 écrit en UTF-8 avec BOM (`Set-Content`, `Out-F
 | --- | --- |
 | P0 Maquettes | Validé (2026-11-04) |
 | P1 Socle | Livré, en attente de test sur le RSP2 Pro |
-| P2 Qualification | Banc matériel livré (D12), en attente de test sur le RSP2 Pro ; campagne A/A en P3 |
-| P3 Mode commuté, fréquences imposées | À faire |
+| P2 Qualification | Banc matériel livré (D12), en attente de test sur le RSP2 Pro ; campagne A/A livrée en P3 |
+| P3 Mode commuté, fréquences imposées | Livré avec le simulateur (D13), en attente de test sur le RSP2 Pro |
 | P4 Bande automatique | À faire |
 | P5 Mode simultané | À faire |
 | P6 Résultats locaux | En partie (D11) : démonstration, liste, page de résultats sur l'API |

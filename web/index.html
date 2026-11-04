@@ -40,6 +40,30 @@
     </div>
 
     <section>
+      <div class="card" id="campaign-card">
+        <div class="card-head">
+          <div style="display:grid;gap:4px;min-width:0">
+            <div class="eyebrow" id="camp-eyebrow">Campagne</div>
+            <h3 id="camp-title" style="font-size:17px">Aucune campagne en cours</h3>
+            <div class="meta" id="camp-meta" style="font-size:13.5px"></div>
+          </div>
+          <div class="controls" style="align-items:center">
+            <span class="pill" id="camp-pill" hidden><span class="dot"></span><span id="camp-word"></span></span>
+            <a class="btn ghost" id="camp-results" href="#" hidden>Voir les résultats</a>
+            <button class="btn ghost" type="button" id="camp-stop" hidden>Arrêter</button>
+            <a class="btn primary" id="camp-new" href="/campaigns/new">Nouvelle campagne</a>
+          </div>
+        </div>
+        <div class="campbar" id="camp-bar" hidden><i id="camp-progress"></i></div>
+        <div class="banner error" id="camp-confirm" hidden>
+          Arrêter la campagne maintenant ? Les mesures déjà prises sont conservées et la campagne sera marquée « abandonnée ».
+          <button class="btn ghost" type="button" id="camp-stop-yes">Arrêter</button>
+          <button class="linkbtn" type="button" id="camp-stop-no">Continuer la campagne</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
       <div class="card">
         <div class="controls">
           <div class="ctl" id="ctl-antenna"><span class="eyebrow">Entrée d'antenne</span><div class="seg" id="antenna-seg"></div></div>

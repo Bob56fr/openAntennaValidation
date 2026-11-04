@@ -6,7 +6,7 @@ Compare la réception de deux à dix antennes HF en mesurant, sur les mêmes sig
 - Décisions et écarts : [docs/decisions.md](docs/decisions.md)
 - Maquettes de l'interface : [design/](design/)
 
-État : phase P2 (qualification). La page locale affiche le SDR, le spectre HF en direct et bascule entre les entrées A et B ; le banc de qualification mesure ce que coûte la bascule. Deux campagnes de démonstration montrent la présentation des résultats ; les vraies campagnes arrivent avec la phase P3.
+État : phase P3. Une station en mode commuté (un SDR à deux entrées) qualifie sa commutation, décrit ses antennes et leurs chaînes, puis mène des campagnes de mesure sur des fréquences imposées, de 1 minute à 1 mois, consultables pendant et après la mesure. Le choix automatique des signaux arrive avec la phase P4, le mode simultané (plusieurs SDR) avec la phase P5.
 
 ## Deux façons de comparer
 

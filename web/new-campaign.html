@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nouvelle campagne · openAntennaValidation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/results.css">
+  <script src="/static/theme.js"></script>
+  <style>
+    .steps { display: grid; gap: 14px; counter-reset: s; }
+    .step { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 16px 18px; display: grid; gap: 10px; }
+    .step > h2 { margin: 0; font-family: var(--font-cond); font-weight: 600; font-size: 19px; display: flex; gap: 10px; align-items: baseline; }
+    .step > h2::before { counter-increment: s; content: counter(s); font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+    .row { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: end; }
+    .freq-row { display: grid; grid-template-columns: 150px 170px 140px auto; gap: 8px; align-items: center; }
+    @media (max-width: 620px) { .freq-row { grid-template-columns: 1fr 1fr; } }
+    .freq-head { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-family: var(--font-cond); font-weight: 600; }
+    .coverage { height: 26px; position: relative; background: var(--track); border-radius: 4px; overflow: hidden; }
+    .coverage i { position: absolute; top: 4px; bottom: 4px; background: var(--s1); border-radius: 2px; min-width: 2px; }
+    .coverage .dc { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--ink-2); }
+    .note { font-size: 13.5px; color: var(--ink-2); }
+    .check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; cursor: pointer; }
+    .check input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--ink); flex: none; }
+    .verd { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; }
+    .verd span { display: inline-flex; gap: 6px; align-items: center; }
+    .ico { width: 15px; height: 15px; display: inline-block; vertical-align: -3px; flex: none; }
+    dl.facts { max-width: 560px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M2 15 Q6 4 11 11 T20 7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/><path d="M2 18 Q7 9 11 14 T20 12" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linecap="round"/></svg>openAntennaValidation</div>
+      <nav class="tabs" aria-label="Station">
+        <a href="/">Tableau de bord</a>
+        <a href="/campaigns" aria-current="page">Campagnes</a>
+        <a href="/qualification">Qualification</a>
+        <a href="/installation">Installation</a>
+      </nav>
+      <div class="right"><button class="linkbtn" type="button" onclick="toggleTheme()">Thème</button></div>
+    </div>
+  </header>
+  <div class="wrap head">
+    <div class="eyebrow">Campagne · mode commuté · fréquences imposées</div>
+    <h1>Nouvelle campagne</h1>
+    <div class="meta" id="meta"></div>
+  </div>
+  <main class="wrap">
+    <div class="banner error" id="error" hidden></div>
+    <div class="banner warn" id="blocker" hidden></div>
+    <form class="steps" id="form" autocomplete="off">
+      <section class="step">
+        <h2>Antennes</h2>
+        <div class="row">
+          <div class="ctl"><label class="eyebrow" for="ant-a">Entrée A</label><select id="ant-a"></select></div>
+          <div class="ctl"><label class="eyebrow" for="ant-b">Entrée B</label><select id="ant-b"></select></div>
+          <div class="ctl"><label class="eyebrow" for="ref">Référence</label><select id="ref"><option value="0">Entrée A</option><option value="1">Entrée B</option></select></div>
+        </div>
+        <label class="check"><input type="checkbox" id="aa"> Campagne A/A : la même antenne sur les deux entrées, par un splitter. L'écart vrai est nul ; ce qui reste mesure l'erreur de la méthode et donne les marges par classe de signal au profil de qualification.</label>
+        <p class="note" id="ant-note"></p>
+      </section>
+
+      <section class="step">
+        <h2>Fréquences</h2>
+        <div class="row"><div class="ctl"><label class="eyebrow" for="band">Bande</label><select id="band"></select></div></div>
+        <div class="freq-row freq-head"><span>Fréquence (kHz)</span><span>Classe</span><span>Largeur (Hz)</span><span></span></div>
+        <div id="freqs"></div>
+        <div><button class="btn ghost" type="button" id="add-freq">Ajouter une fréquence</button></div>
+        <div class="coverage" id="coverage" aria-label="Fréquences dans la bande utile"></div>
+        <p class="note" id="freq-note"></p>
+      </section>
+
+      <section class="step">
+        <h2>Durée et cadence</h2>
+        <div class="row">
+          <div class="ctl"><label class="eyebrow" for="dur">Durée</label><input id="dur" type="number" min="1" step="1" value="24" style="width:100px"></div>
+          <div class="ctl"><label class="eyebrow" for="unit">Unité</label><select id="unit"><option value="60">minutes</option><option value="3600" selected>heures</option><option value="86400">jours</option></select></div>
+          <div class="ctl"><label class="eyebrow" for="rate">Commutation (Hz)</label><input id="rate" type="number" min="1" max="100" step="1" style="width:100px"></div>
+          <div class="ctl"><label class="eyebrow" for="title">Titre (facultatif)</label><input id="title" type="text" style="width:280px" placeholder="sinon : antenne A contre antenne B"></div>
+        </div>
+        <dl class="facts" id="plan"></dl>
+      </section>
+
+      <section class="step">
+        <h2>Qualification et lancement</h2>
+        <div id="qual"></div>
+        <label class="check" id="accept-row" hidden><input type="checkbox" id="accept"> J'accepte les limites du profil de qualification : elles seront jointes à la campagne et affichées avec ses résultats.</label>
+        <div class="row"><button class="btn primary" type="submit" id="go">Lancer la campagne</button><a class="linkbtn" href="/campaigns">Annuler</a></div>
+      </section>
+    </form>
+  </main>
+  <footer><div class="wrap">openAntennaValidation, logiciel libre (GPLv3).</div></footer>
+  <script src="/static/new-campaign.js"></script>
+</body>
+</html>
