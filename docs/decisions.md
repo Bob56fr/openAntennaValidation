@@ -53,3 +53,13 @@ Pour tester la mise en page sans matériel, une partie de P6 est réalisée dès
 - `campaigns.py` définit le **format d'échange des résultats** (`/api/campaigns/{uuid}/results`) : par signal et par voie, les médianes par fenêtre telles que mesurées au SDR ; la page ajoute les pertes de chaîne du segment pour la vue Antenne. Ce format servira aussi au plugin WordPress.
 - Pages `/campaigns` et `/campaign?id=…` : portage de la maquette P0 sur l'API ; `results.css` et `results.js` sont prévus pour être repris par le plugin.
 - Restent pour P6 : tableau des mesures exclues (codes qualité), export CSV, pistes FT8 (P10). Les intervalles de confiance utilisent encore l'approximation de la maquette (taille effective n/8), le bootstrap par blocs viendra avec les vraies campagnes.
+
+## D12 — P2 : banc matériel ; la campagne A/A passe en P3 (2026-11-04)
+
+- **Banc matériel livré** (`bench.py`, `qualification.py`, page `/qualification`) : cinq étapes guidées (plancher propre, splitter symétrique, câbles inversés, atténuateur sur B, isolation en option). Les mesures tournent dans le processus d'acquisition, qui détient le pilote.
+- **Bascule lue dans le flux** : avec l'atténuateur, chaque bascule devient une marche ; l'instant réel est le passage à mi-hauteur (en dB), d'où la latence et sa gigue. Le parasite et le temps d'établissement sont lus sur la moyenne de centaines de bascules alignées sur cet instant : une bascule seule est trop bruitée pour une tolérance de ±0,2 dB. Sans marche (splitter symétrique), l'alignement se fait sur la commande et le temps mesuré est un majorant.
+- **Tolérance effective** : jamais inférieure à 3 fois le bruit résiduel de la moyenne. Si elle dépasse le double de la tolérance réglée, la mesure est déclarée « bruitée » (source trop variable : voix, évanouissement) et un avertissement conseille le générateur de bruit.
+- **Neutralisation** = latence p99 + établissement + marge (0,2 ms) ; temps utile = 1 − neutralisation / durée sur chaque entrée.
+- **Correction des entrées** = moyenne des mesures câbles normaux et inversés, par sous-bande ; la demi-différence est le déséquilibre du splitter.
+- **Verdict provisoire par classe** d'après le temps utile à la cadence nécessaire à la classe (porteuses et numériques 2 Hz, SSB 20 Hz ; seuils 70 % et 40 %). **Les marges en dB viendront de la campagne A/A**, déplacée en P3 : elle demande le moteur de mesure des campagnes et la classification des signaux ; ce sera une campagne dont l'écart attendu est nul.
+- Le profil est enregistré dans `hardware_profiles` (identité, bande, gain, cadence), l'ancien profil de la même identité et de la même bande est désactivé, validité 180 jours.

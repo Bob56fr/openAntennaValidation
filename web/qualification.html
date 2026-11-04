@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qualification · openAntennaValidation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/results.css">
+  <script src="/static/theme.js"></script>
+  <style>
+    :root { --blank: rgba(208, 59, 59, 0.10); --tol: rgba(12, 163, 12, 0.12);
+      --good-bg: rgba(12, 163, 12, 0.07); --warn-bg: rgba(250, 178, 25, 0.12); --crit-bg: rgba(208, 59, 59, 0.08); }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --blank: rgba(230, 103, 103, 0.14); --tol: rgba(60, 194, 60, 0.14);
+      --good-bg: rgba(12, 163, 12, 0.12); --crit-bg: rgba(208, 59, 59, 0.14); } }
+    :root[data-theme="dark"] { --blank: rgba(230, 103, 103, 0.14); --tol: rgba(60, 194, 60, 0.14);
+      --good-bg: rgba(12, 163, 12, 0.12); --crit-bg: rgba(208, 59, 59, 0.14); }
+    .steps { display: grid; gap: 10px; counter-reset: step; }
+    .step { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 14px 16px; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 4px 14px; align-items: start; }
+    .step .num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-mono); font-size: 13px; box-shadow: inset 0 0 0 1px var(--axis); color: var(--ink-2); }
+    .step.done .num { background: var(--good); color: #fff; box-shadow: none; }
+    .step.busy .num { background: var(--warning); color: #0b0b0b; box-shadow: none; }
+    .step.err .num { background: var(--critical); color: #fff; box-shadow: none; }
+    .step h3 { margin: 0; font-size: 15px; font-weight: 600; }
+    .step p { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); max-width: 80ch; }
+    .step .res { font-size: 13px; color: var(--ink); font-family: var(--font-mono); margin-top: 4px; }
+    .step .res.err { color: var(--crit-ink); font-family: var(--font-body); }
+    @media (max-width: 620px) { .step { grid-template-columns: 34px minmax(0, 1fr); } .step .act { grid-column: 2; } }
+    .verdicts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    @media (max-width: 900px) { .verdicts { grid-template-columns: minmax(0, 1fr); } }
+    .vcard { border-radius: var(--r); padding: 14px 16px; display: grid; gap: 6px; align-content: start; box-shadow: inset 0 0 0 1px var(--ring); background: var(--surface); position: relative; overflow: hidden; min-width: 0; }
+    .vcard::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--axis); }
+    .vcard.ok::before { background: var(--good); } .vcard.warn::before { background: var(--warning); } .vcard.bad::before { background: var(--critical); }
+    .vcard.ok { background: linear-gradient(var(--good-bg), var(--good-bg)), var(--surface); }
+    .vcard.warn { background: linear-gradient(var(--warn-bg), var(--warn-bg)), var(--surface); }
+    .vcard.bad { background: linear-gradient(var(--crit-bg), var(--crit-bg)), var(--surface); }
+    .vtop { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; }
+    .ok .vtop { color: var(--good-ink); } .warn .vtop { color: var(--warn-ink); } .bad .vtop { color: var(--crit-ink); }
+    .vname { font-weight: 600; font-size: 14.5px; }
+    .vvalue { font-size: 26px; font-weight: 600; line-height: 1.15; }
+    .vvalue small { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+    .vdesc { font-size: 13px; color: var(--ink-2); }
+    .newrun { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: end; }
+    .accept { display: grid; gap: 12px; }
+    .check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; cursor: pointer; max-width: 80ch; }
+    .check input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--ink); flex: none; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M2 15 Q6 4 11 11 T20 7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/><path d="M2 18 Q7 9 11 14 T20 12" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linecap="round"/></svg>openAntennaValidation</div>
+      <nav class="tabs" aria-label="Station">
+        <a href="/">Tableau de bord</a>
+        <a href="/campaigns">Campagnes</a>
+        <a href="/qualification" aria-current="page">Qualification</a>
+        <span class="soon" title="Phase P3">Installation</span>
+      </nav>
+      <div class="right"><button class="linkbtn" type="button" onclick="toggleTheme()">Thème</button></div>
+    </div>
+  </header>
+
+  <div class="wrap head">
+    <div class="eyebrow">Qualification · mode commuté · banc matériel</div>
+    <div class="head-row"><h1 id="title">Qualification du SDR</h1><span class="pill" id="run-pill"><span class="dot"></span><span id="run-word">—</span></span></div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <main class="wrap">
+    <div class="banner error" id="error" hidden></div>
+    <div class="banner warn" id="receiver-warn" hidden></div>
+
+    <section id="sec-new">
+      <div class="card">
+        <h3>Nouvelle qualification</h3>
+        <p class="desc">Le banc mesure ce que coûte la bascule entre les entrées A et B : latence, parasite, temps d'établissement, temps utile, ainsi que le déséquilibre des entrées et le plancher propre du SDR. Gardez la bande et le gain prévus pour vos campagnes. Matériel : un splitter, deux câbles identiques, un atténuateur, deux charges 50 Ω, et de préférence un générateur de bruit.</p>
+        <div class="newrun">
+          <div class="ctl"><label class="eyebrow" for="att">Atténuateur (dB)</label><input id="att" type="number" min="3" max="40" step="0.5" style="width:110px"></div>
+          <button class="btn primary" id="btn-new" type="button">Commencer la qualification</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-steps" hidden>
+      <div class="sec-head"><h2>Étapes du banc</h2><p>Suivez l'ordre, puis cliquez sur « Mesurer ». Chaque mesure dure quelques secondes.</p></div>
+      <div class="steps" id="steps"></div>
+      <div><button class="btn primary" id="btn-finish" type="button" disabled>Terminer et enregistrer le profil</button> <span class="desc" id="finish-note"></span></div>
+    </section>
+
+    <section id="sec-report" hidden>
+      <div class="sec-head"><h2>Verdict provisoire par classe de signal</h2><p>D'après le temps utile à la cadence nécessaire à chaque classe. Les marges en dB viendront de la campagne A/A (phase P3).</p></div>
+      <div class="banner warn" id="report-warn" hidden></div>
+      <div class="verdicts" id="verdicts"></div>
+      <div class="grid2">
+        <div class="card"><h3 id="t-step">Réponse à une bascule</h3><p class="desc" id="d-step"></p><div class="key" id="k-step"></div>
+          <div id="c-step" class="chart h-l" role="img" aria-label="Réponse à une bascule"></div></div>
+        <div class="card"><h3>Latence entre la commande et l'effet</h3><p class="desc" id="d-hist"></p>
+          <div id="c-hist" class="chart h-l" role="img" aria-label="Répartition des latences"></div></div>
+        <div class="card"><h3>Déséquilibre des entrées A − B</h3><p class="desc" id="d-imb"></p><div class="key" id="k-imb"></div>
+          <div id="c-imb" class="chart h-m" role="img" aria-label="Déséquilibre des entrées selon la fréquence"></div></div>
+        <div class="card"><h3>Temps utile selon la cadence de commutation</h3><p class="desc" id="d-frac"></p>
+          <div id="c-frac" class="chart h-m" role="img" aria-label="Temps utile selon la cadence"></div></div>
+      </div>
+      <div class="card"><h3>Profil matériel</h3><div class="tbl-wrap"><table id="profile"></table></div></div>
+      <div class="card accept" id="accept" hidden>
+        <h3>Accepter ces limites</h3>
+        <label class="check"><input type="checkbox" id="ack"> J'ai lu ces limites. Elles seront jointes aux campagnes et affichées avec leurs résultats.</label>
+        <div><button class="btn primary" id="btn-accept" type="button" disabled>Accepter le profil</button> <span class="desc" id="accept-note"></span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer><div class="wrap">openAntennaValidation, logiciel libre (GPLv3).</div></footer>
+  <script src="/static/vendor/echarts.min.js"></script>
+  <script src="/static/qualification.js"></script>
+</body>
+</html>

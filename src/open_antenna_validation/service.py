@@ -24,6 +24,7 @@ from open_antenna_validation.hardware import DeviceInfo, HardwareError, SdrDrive
 from open_antenna_validation.hardware import create_driver as default_factory
 from open_antenna_validation.hardware.identity import IdentityCheck, record_hardware
 from open_antenna_validation.hub import Hub
+from open_antenna_validation.qualification import QualificationError, check_step, store_step
 from open_antenna_validation.storage import Database
 from open_antenna_validation.timeutil import now_ms
 
@@ -31,6 +32,7 @@ log = logging.getLogger(__name__)
 
 TOPIC_SPECTRUM = "spectrum"
 TOPIC_STATUS = "status"
+TOPIC_QUALIFICATION = "qualification"
 HF_RANGE_HZ = (1_000_000.0, 30_000_000.0)
 # Retry after a failure or while no SDR is plugged in: 5 s, doubled up to 1 min.
 RESTART_DELAY_S = 5.0
@@ -63,6 +65,8 @@ class Station:
         # Last known state of the receiver, as reported by the worker.
         self.receiver: dict[str, Any] = {"state": "stopped"}
         self.last_spectrum: Event | None = None
+        # Bench step in progress (the worker is busy), and the last bench failure.
+        self.bench: dict[str, Any] = {"busy": False}
 
     @classmethod
     def from_home(
@@ -163,6 +167,15 @@ class Station:
             self.receiver["gain_index"] = event["gain_index"]
             self.db.log_event("gain_change", {"gain_index": event["gain_index"]})
             self._publish_status()
+        elif kind in ("bench_result", "bench_error"):
+            if kind == "bench_result":
+                store_step(self.db, event["run"], event["step"], event["result"])
+                self.bench = {"busy": False, "run": event["run"], "step": event["step"]}
+            else:
+                self.bench = {"busy": False, "run": event["run"], "step": event["step"],
+                              "error": event["message"]}
+                self.db.log_event("error", {"bench": event["step"], "message": event["message"]})
+            self.hub.publish(TOPIC_QUALIFICATION, self.bench)
         elif kind == "error":
             state = "absent" if event.get("absent") else "error"
             changed = (self.receiver.get("state"), self.receiver.get("error")) != (
@@ -220,6 +233,22 @@ class Station:
         self._send("gain", index)
         self.config.hardware.gain_step = index
         self.save_config()
+
+    def start_bench_step(self, run: str, step: str) -> None:
+        """Ask the worker for one bench step; the result arrives as an event."""
+        definition = check_step(self.db, run, step)
+        if self.bench.get("busy"):
+            raise QualificationError("Une mesure du banc est déjà en cours.")
+        q = self.config.qualification
+        request = {
+            "run": run, "step": step, "measures": list(definition.measures),
+            "switches": q.switches, "dwell_ms": q.dwell_ms, "levels_seconds": q.levels_seconds,
+            "subbands": q.subbands, "fft_size": self.config.spectrum.fft_size,
+            "tolerance_db": q.tolerance_db, "step_min_db": q.step_min_db,
+        }
+        self._send("bench", request)
+        self.bench = {"busy": True, "run": run, "step": step, "since_ms": now_ms()}
+        self.hub.publish(TOPIC_QUALIFICATION, self.bench)
 
     # --- reports ------------------------------------------------------------------
 

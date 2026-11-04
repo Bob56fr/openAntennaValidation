@@ -24,6 +24,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from open_antenna_validation import bench
 from open_antenna_validation.config import HardwareConfig, ReceiverConfig, SpectrumConfig
 from open_antenna_validation.dsp.measure import Spectrum, clipping_ratio, db
 from open_antenna_validation.hardware import HardwareError, SdrDriver, create_driver
@@ -138,6 +139,14 @@ def run_acquisition(
                     elif name == "gain":
                         driver.set_gain_step(int(value))
                         events.put({"type": "gain", "gain_index": int(value), "ts_ms": now_ms()})
+                    elif name == "bench":
+                        events.put(run_bench_step(driver, value))
+                        # Back to the input the operator had chosen, fresh spectrum.
+                        driver.set_antenna(antenna)
+                        spec = Spectrum(spectrum_cfg.fft_size, rate)
+                        acc[:] = 0
+                        acc_frames = 0
+                        last_emit = time.monotonic()
             except queue.Empty:
                 pass
 
@@ -177,6 +186,26 @@ def run_acquisition(
     finally:
         driver.shutdown()
         events.put({"type": "closed"})
+
+
+def run_bench_step(driver: SdrDriver, request: dict[str, Any]) -> Event:
+    """One qualification bench step, in the worker (it owns the driver)."""
+    result: dict[str, Any] = {}
+    try:
+        if "levels" in request["measures"]:
+            result["levels"] = bench.measure_levels(
+                driver, request["levels_seconds"], request["fft_size"], request["subbands"])
+        if "switching" in request["measures"]:
+            raw = bench.measure_switching(driver, request["switches"], request["dwell_ms"] / 1000)
+            result["switching"] = bench.analyze_switching(
+                raw["power"], raw["rate"], raw["dwell"], raw["commands"], raw["inputs"],
+                step_min_db=request["step_min_db"], tolerance_db=request["tolerance_db"])
+            result["switching"]["dropped"] = raw["dropped"]
+    except HardwareError as exc:
+        return {"type": "bench_error", "run": request["run"], "step": request["step"],
+                "message": str(exc)}
+    return {"type": "bench_result", "run": request["run"], "step": request["step"],
+            "result": result}
 
 
 def _child_main(hardware: dict[str, Any], receiver: dict[str, Any], spectrum: dict[str, Any],

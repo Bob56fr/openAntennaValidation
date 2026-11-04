@@ -140,6 +140,25 @@ low_hz = 28000000.0
 high_hz = 29700000.0
 note = ""
 
+[qualification]
+switches = 400                # bascules enregistrées par mesure
+dwell_ms = 10.0               # durée sur chaque entrée entre deux bascules
+levels_seconds = 4.0          # durée des mesures de niveau (entrées alternées)
+subbands = 16                 # sous-bandes du déséquilibre en fonction de la fréquence
+tolerance_db = 0.2            # établissement : retour à ± cette valeur du niveau final
+step_min_db = 6.0             # marche minimale pour repérer la bascule dans le flux
+blanking_margin_ms = 0.2      # marge ajoutée à la neutralisation (latence p99 + établissement)
+attenuator_db = 10.0          # valeur par défaut de l'atténuateur du banc
+switch_rate_hz = 25.0         # cadence de commutation rapide par défaut des campagnes
+useful_ok = 0.7               # temps utile au-dessus duquel une classe est exploitable
+useful_min = 0.4              # en dessous : inexploitable ; entre les deux : dégradée
+validity_days = 180           # durée de validité d'un profil
+
+[qualification.class_rate_hz]  # cadence de commutation nécessaire par classe de signal
+carrier = 2.0
+digital = 2.0
+ssb = 20.0
+
 [demo]
 enabled = true                # campagnes de démonstration tant qu'aucune vraie campagne n'existe
 

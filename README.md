@@ -6,7 +6,7 @@ Compare la réception de deux à dix antennes HF en mesurant, sur les mêmes sig
 - Décisions et écarts : [docs/decisions.md](docs/decisions.md)
 - Maquettes de l'interface : [design/](design/)
 
-État : phase P1 (socle). La page locale affiche le SDR détecté, le spectre HF en direct et bascule entre les entrées A et B du SDR. Les campagnes de mesure arrivent avec les phases P2 (qualification) et P3.
+État : phase P2 (qualification). La page locale affiche le SDR, le spectre HF en direct et bascule entre les entrées A et B ; le banc de qualification mesure ce que coûte la bascule. Deux campagnes de démonstration montrent la présentation des résultats ; les vraies campagnes arrivent avec la phase P3.
 
 ## Deux façons de comparer
 

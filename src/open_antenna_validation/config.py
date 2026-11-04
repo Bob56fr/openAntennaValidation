@@ -144,6 +144,33 @@ class SpectrumConfig(_Section):
     clip_alert_ratio: float = Field(default=0.001, gt=0.0)
 
 
+def _default_class_rates() -> dict[str, float]:
+    # Switching rate each signal class needs: a voice changes faster than a carrier.
+    return {"carrier": 2.0, "digital": 2.0, "ssb": 20.0}
+
+
+class QualificationConfig(_Section):
+    """Switching bench (cahier des charges, section 6) and verdict thresholds."""
+
+    switches: int = Field(default=400, ge=20, le=5000)
+    dwell_ms: float = Field(default=10.0, ge=2.0, le=200.0)
+    levels_seconds: float = Field(default=4.0, ge=1.0, le=60.0)
+    subbands: int = Field(default=16, ge=4, le=64)
+    # Settling: back within this tolerance of the final level (never below 3 x the noise).
+    tolerance_db: float = Field(default=0.2, gt=0.0)
+    # Smallest level step between inputs that makes the switch visible in the stream.
+    step_min_db: float = Field(default=6.0, gt=0.0)
+    blanking_margin_ms: float = Field(default=0.2, ge=0.0)
+    attenuator_db: float = Field(default=10.0, gt=0.0, le=40.0)
+    # Default fast switching rate of a campaign, used for the useful time of the profile.
+    switch_rate_hz: float = Field(default=25.0, gt=0.0, le=200.0)
+    class_rate_hz: dict[str, float] = Field(default_factory=_default_class_rates)
+    # Useful time at the rate a class needs: usable above ok, degraded above min.
+    useful_ok: float = Field(default=0.7, gt=0.0, le=1.0)
+    useful_min: float = Field(default=0.4, gt=0.0, le=1.0)
+    validity_days: int = Field(default=180, ge=1)
+
+
 class DemoConfig(_Section):
     """Demonstration campaigns, shown while no real campaign exists (decision D9)."""
 
@@ -180,6 +207,7 @@ class Config(_Section):
     receiver: ReceiverConfig = Field(default_factory=ReceiverConfig)
     spectrum: SpectrumConfig = Field(default_factory=SpectrumConfig)
     bands: list[Band] = Field(default_factory=_default_bands)
+    qualification: QualificationConfig = Field(default_factory=QualificationConfig)
     demo: DemoConfig = Field(default_factory=DemoConfig)
     web: WebConfig = Field(default_factory=WebConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
