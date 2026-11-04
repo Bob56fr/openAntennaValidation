@@ -55,6 +55,6 @@ Pièges Windows : PowerShell 5.1 écrit en UTF-8 avec BOM (`Set-Content`, `Out-F
 | P5 Mode simultané | Livré avec le simulateur (D16), en attente de test sur plusieurs SDR réels |
 | P6 Résultats locaux | Livré (D11, D17) : bootstrap par blocs, Holm, qualité des données, export CSV ; pistes FT8 en P10 |
 | P7 WordPress | Livré (D18) : vérifié sur le WordPress de test (Debian, port 8082) ; à essayer sur OVH |
-| P8 RTL-SDR V4 et Airspy HF+ | À faire |
+| P8 RTL-SDR V4 et Airspy HF+ | Livré (D19), en attente de test sur les récepteurs |
 | P9 Installeurs | Linux : première version (`install/linux`) ; Windows : à faire |
 | P10 Modes numériques | À faire |

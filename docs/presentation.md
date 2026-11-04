@@ -46,7 +46,9 @@ La liste des campagnes se filtre par opérateur, bande, paire de types d'antenne
 ## Matériel
 
 - **SDRplay RSP2 Pro** : récepteur de référence, mode commuté (deux entrées) et simultané.
-- **RTL-SDR Blog V4** et **Airspy HF+ Discovery** : prévus (phase P8).
+- **RTL-SDR Blog V4** : mode simultané, une clé par antenne, jusqu'à 28,8 MHz (au-delà, la clé change d'entrée). Clé économique, dynamique limitée (8 bits). Chaque clé doit avoir son propre numéro de série. Les autres clés RTL-SDR ne sont pas acceptées : elles ne reçoivent les ondes courtes que sans réglage de gain.
+- **Airspy HF+ Discovery** : mode simultané, un appareil par antenne. Excellent en ondes courtes, bande utile d'environ 200 kHz à la fréquence d'échantillonnage par défaut.
+- Les modèles peuvent être mélangés en mode simultané ; la campagne est alors marquée « hétérogène » et l'étalonnage A/A chiffre l'écart entre récepteurs.
 - Un ordinateur sous Windows ou Linux (Debian). Plusieurs SDR en simultané demandent un processeur à plusieurs cœurs : le test de charge le vérifie.
 
 ## Où en est le projet
@@ -61,7 +63,7 @@ La liste des campagnes se filtre par opérateur, bande, paire de types d'antenne
 | Réception simultanée (2 à 10 SDR) | Faite avec le simulateur, en attente d'essai sur plusieurs SDR |
 | Pages de résultats, statistiques, export CSV | Faites |
 | Site WordPress multi-opérateurs | Fait |
-| RTL-SDR V4 et Airspy HF+ | À faire |
+| RTL-SDR V4 et Airspy HF+ | Faits, en attente d'essai sur les récepteurs |
 | Installeurs Windows et Linux | Linux : première version ; Windows : à faire |
 | Modes numériques (FT8, FT4, WSPR) : suivi des stations, distance, propagation | À faire, en option |
 

@@ -18,16 +18,23 @@ Compare la réception de deux à dix antennes HF en mesurant, sur les mêmes sig
 ## Prérequis
 
 - Python 3.11 ou plus récent.
-- Matériel de référence : SDRplay RSP2 Pro. Prévus : RTL-SDR Blog V4 et Airspy HF+ Discovery (phase P8).
-- API SDRplay 3.x, à télécharger sur le [site de SDRplay](https://www.sdrplay.com/downloads/). Elle est propriétaire et ne peut pas être fournie avec ce logiciel. Son service (`SDRplayAPIService` sous Windows) doit tourner.
+- Matériel de référence : SDRplay RSP2 Pro. Aussi, en mode simultané : RTL-SDR Blog V4 et Airspy HF+ Discovery.
+- Pour un SDRplay : API SDRplay 3.x, à télécharger sur le [site de SDRplay](https://www.sdrplay.com/downloads/). Elle est propriétaire et ne peut pas être fournie avec ce logiciel. Son service (`SDRplayAPIService` sous Windows) doit tourner.
+- Pour une RTL-SDR Blog V4 : librtlsdr de la [branche RTL-SDR Blog](https://github.com/rtlsdrblog/rtl-sdr-blog/releases) (`rtlsdr.dll` et `libusb-1.0.dll` sous Windows, avec le pilote WinUSB installé par Zadig). Chaque clé doit avoir un numéro de série unique (`rtl_eeprom -s`).
+- Pour un Airspy HF+ : [libairspyhf](https://github.com/airspy/airspyhf/releases) (`airspyhf.dll` sous Windows).
+- Sous Windows, si la bibliothèque n'est pas dans le `PATH`, indiquez son chemin dans `library_path` de la section du pilote (`[hardware.rtlsdr]`, `[hardware.airspyhf]`).
 
 ## Installation
 
 **Debian 12+ / Raspberry Pi OS 64 bits** : installez l'API SDRplay (ou déposez son installeur `.run` dans votre dossier personnel), puis :
 
 ```bash
-sudo ./install/linux/install.sh
+sudo ./install/linux/install.sh                        # SDRplay
+sudo ./install/linux/install.sh --sdr rtlsdr           # RTL-SDR Blog V4 (librtlsdr compilée)
+sudo ./install/linux/install.sh --sdr airspyhf,rtlsdr  # Airspy principal, plus des RTL-SDR
 ```
+
+Relancé sans `--sdr`, l'installeur reprend les SDR de la configuration existante.
 
 **Windows (développement, en attendant l'installeur de la phase P9)** :
 
@@ -46,9 +53,9 @@ Le répertoire de la station (configuration, base, journaux) est `%PROGRAMDATA%\
 
 | Commande | Rôle |
 | --- | --- |
-| `oav init [--driver simulated]` | Crée la configuration (identifiant de station, secret de session), la base, le mot de passe |
+| `oav init [--driver sdrplay\|rtlsdr\|airspyhf\|simulated]` | Crée la configuration (identifiant de station, secret de session), la base, le mot de passe |
 | `oav set-password` | Change le mot de passe de la page web |
-| `oav detect` | Liste les SDR détectés et leurs entrées |
+| `oav detect` | Liste les SDR détectés (de chaque pilote de la station) et leurs entrées |
 | `oav probe [--frequency 7.1e6] [--gain-step N]` | Ouvre le SDR, mesure niveau, plancher et écrêtage sur chaque entrée |
 | `oav serve` | Lance le service et la page web |
 
@@ -65,6 +72,8 @@ others = [
     { serial = "2345678901", antenna = "A" },
 ]
 ```
+
+Avec des RTL-SDR ou des Airspy HF+, mettez `driver = "rtlsdr"` ou `driver = "airspyhf"` ; un SDR de la liste peut aussi avoir son propre pilote (`{ serial = "3B52AB5DAC5A7E91", driver = "airspyhf" }`). Chaque SDR prend sa plus basse fréquence d'échantillonnage possible au-dessus de `sample_rate` (250 kS/s par défaut) ; pour couvrir toute la bande des 10 m avec des RTL-SDR, mettez `sample_rate = 2400000`.
 
 Chaque SDR a son propre processus d'acquisition. Avant la première campagne, faites une campagne A/A (la même antenne sur tous les SDR par un splitter) : elle mesure l'écart de gain de chaque SDR et les marges. Les SDR doivent rester branchés sur les mêmes ports et dans le même ordre de voies pour que l'étalonnage s'applique.
 
