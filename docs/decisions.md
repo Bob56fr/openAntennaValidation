@@ -75,3 +75,7 @@ Pour tester la mise en page sans matériel, une partie de P6 est réalisée dès
 - **Campagne A/A** : même antenne sur les deux entrées ; à la fin, marge par classe = |biais| + 2 écarts-types des médianes de fenêtre de B − A, écrite dans le profil ; les campagnes suivantes la reprennent. Sans marge connue, la page de résultats l'indique et ne s'appuie que sur l'intervalle de confiance.
 - **Installation** (`installation.py`) : chaînes versionnées ; pertes des câbles interpolées en a·√f + b·f sur deux points de fiche technique (valeurs **à vérifier**, une perte mesurée peut être saisie).
 - Reste pour P4 : choix automatique des signaux (bande automatique), réduction de la cadence en bande calme.
+
+## D14 — Banc : critère d'établissement robuste (2026-11-04)
+
+Le temps d'établissement variait d'un essai à l'autre (2,7 à 4 ms pour 1,6 ms simulées) : le niveau final était estimé par une médiane (biaisée sous la moyenne pour du bruit) et une pointe de bruit isolée suffisait à repousser la fin de l'établissement. Désormais : normalisation par la moyenne du niveau final, enveloppe lissée sur 0,3 ms, tolérance effective d'au moins 4 fois le bruit résiduel, et seuls les dépassements soutenus (au moins 0,3 ms) comptent, la transition elle-même restant prise en compte. Sur dix tirages : 1,14 à 1,37 ms pour 1,36 ms théoriques.

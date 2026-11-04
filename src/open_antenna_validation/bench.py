@@ -49,6 +49,20 @@ def _moving_average(x: Floats, n: int) -> Floats:
     return out
 
 
+def _last_sustained(flags: npt.NDArray[np.bool_], min_run: int) -> int:
+    """End index of the last run of True at least ``min_run`` long (0 if none).
+
+    The first run is always kept: right after the switch, the transition itself counts.
+    """
+    edges = np.diff(np.concatenate(([0], flags.astype(np.int8), [0])))
+    starts, ends = np.nonzero(edges == 1)[0], np.nonzero(edges == -1)[0]
+    last = 0
+    for k, (a, b) in enumerate(zip(starts, ends, strict=True)):
+        if k == 0 and a == 0 or b - a >= min_run:
+            last = int(b)
+    return last
+
+
 def _thin(values: Floats, points: int = MAX_POINTS) -> list[float]:
     step = max(1, math.ceil(len(values) / points))
     return [round(float(v), 3) for v in values[::step]]
@@ -137,7 +151,8 @@ def analyze_switching(
         anchor = eff if detected and eff >= 0 else (c if not detected else -1)
         if anchor < before or anchor + after > len(power):
             continue
-        final = float(np.median(smooth[c + post_from : c + dwell]))
+        # Mean, not median: the median of noise power sits below its mean.
+        final = float(np.mean(power[c + post_from : c + dwell]))
         rel.append(power[anchor - before : anchor + after] / max(final, 1e-30))
     if not rel:
         raise HardwareError("Aucune bascule exploitable dans l'enregistrement.")
@@ -151,14 +166,15 @@ def analyze_switching(
     # Settling: last instant after the anchor where the averaged envelope leaves the tolerance.
     # With a detected step, the transition itself is part of the settling time.
     # The averaged envelope keeps some noise: smooth it more for this test, and never use a
-    # tolerance below 3 times the residual noise measured at the end of the window.
+    # tolerance below 4 times the residual noise measured at the end of the window.
     settle_env = np.asarray(
-        db(_moving_average(stack.mean(axis=0), 2 * smooth_n)), dtype=np.float64)[before:]
+        db(_moving_average(stack.mean(axis=0), 3 * smooth_n)), dtype=np.float64)[before:]
     after_anchor = mean_db[before:]
     tail = settle_env[int(0.6 * len(settle_env)) :]
-    effective_tol = max(tolerance_db, 3.0 * float(np.std(tail)), abs(float(np.mean(tail))) * 1.5)
+    # 4 sigma: over a few hundred correlated samples, 3 sigma is still crossed by noise alone.
+    effective_tol = max(tolerance_db, 4.0 * float(np.std(tail)), abs(float(np.mean(tail))) * 1.5)
     outside = np.nonzero(np.abs(settle_env) > effective_tol)[0]
-    settle_ms = float(outside[-1] + 1) / rate * 1e3 if len(outside) else 0.0
+    settle_ms = float(_last_sustained(np.abs(settle_env) > effective_tol, 3 * smooth_n))         / rate * 1e3
     glitch_db = float(np.max(np.abs(after_anchor[outside[0]:]))) if len(outside) else 0.0
     if detected:
         # Ignore the step itself: the glitch is the overshoot beyond the final level.
