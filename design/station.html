@@ -1,0 +1,541 @@
+<title>openDualSDR Station</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout : tableau de bord local de la station. Vue « En cours » : état en tête, spectre et chute d'eau au centre,
+   mesures en direct, santé de la station. Vue « Avant lancement » : test de charge, espace disque, volume WordPress. */
+:root {
+  --bg: #f2f3f0;
+  --surface: #fcfcfb;
+  --surface-2: #f6f7f4;
+  --ink: #121512;
+  --ink-2: #4b514c;
+  --muted: #7d837d;
+  --line: #e1e2dc;
+  --axis: #c3c5bd;
+  --ring: rgba(18, 21, 18, 0.10);
+  --sig: rgba(125, 131, 125, 0.14);
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --good-ink: #006300;
+  --warn-ink: #7a5200;
+  --crit-ink: #a12a2a;
+  --calm: #b9bdb5;
+  --track: #e6e8e2;
+  --wf0: #fcfcfb; --wf1: #cde2fb; --wf2: #86b6ef; --wf3: #3987e5; --wf4: #1c5cab; --wf5: #0d366b;
+  --s1: #2a78d6; --s2: #eb6834;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-cond: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e100e; --surface: #181a18; --surface-2: #1e211e; --ink: #eef0ec; --ink-2: #c0c4bc;
+    --muted: #8a8e88; --line: #2b2e2b; --axis: #3b3e3a; --ring: rgba(255, 255, 255, 0.10); --sig: rgba(138, 142, 136, 0.16);
+    --good-ink: #3cc23c; --warn-ink: #f3c75a; --crit-ink: #f08a8a; --calm: #4a4e48; --track: #262926;
+    --wf0: #181a18; --wf1: #104281; --wf2: #256abf; --wf3: #5598e7; --wf4: #9ec5f4; --wf5: #e6f0fd;
+    --s1: #3987e5; --s2: #d95926;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e100e; --surface: #181a18; --surface-2: #1e211e; --ink: #eef0ec; --ink-2: #c0c4bc;
+  --muted: #8a8e88; --line: #2b2e2b; --axis: #3b3e3a; --ring: rgba(255, 255, 255, 0.10); --sig: rgba(138, 142, 136, 0.16);
+  --good-ink: #3cc23c; --warn-ink: #f3c75a; --crit-ink: #f08a8a; --calm: #4a4e48; --track: #262926;
+  --wf0: #181a18; --wf1: #104281; --wf2: #256abf; --wf3: #5598e7; --wf4: #9ec5f4; --wf5: #e6f0fd;
+  --s1: #3987e5; --s2: #d95926;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.eyebrow { font-family: var(--font-cond); font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.topbar { border-bottom: 1px solid var(--line); background: var(--surface); }
+.topbar .wrap { display: flex; align-items: center; gap: 16px; padding-block: 10px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-cond); font-weight: 600; font-size: 17px; }
+.tabs { display: flex; gap: 4px; font-size: 14px; flex-wrap: wrap; }
+.tabs span { padding: 4px 10px; border-radius: 4px; color: var(--ink-2); }
+.tabs span[aria-current] { background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.mock-flag { margin-left: auto; font-size: 12px; color: var(--ink-2); border: 1px dashed var(--axis); border-radius: 999px; padding: 2px 10px; }
+
+.viewbar .wrap { display: flex; justify-content: flex-end; padding-block: 14px 0; }
+.seg { display: inline-flex; background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--line); padding: 2px; }
+.seg button { font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 0; border-radius: 4px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.seg button:hover { color: var(--ink); background: var(--surface-2); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+:is(button, input, a):focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+.head { padding-block: 10px 16px; display: grid; gap: 10px; }
+.head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.head h1 { margin: 0; font-family: var(--font-cond); font-weight: 600; font-size: clamp(26px, 3.4vw, 36px); line-height: 1.12; text-wrap: balance; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 18px; color: var(--ink-2); font-size: 14px; }
+.meta b { color: var(--ink); font-weight: 500; }
+.pill { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 3px 12px; }
+.pill.active { color: var(--good-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--good) 45%, transparent); }
+.pill.calm { color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--axis); }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
+.pill.calm .pulse { background: var(--muted); box-shadow: none; }
+@media (prefers-reduced-motion: no-preference) { .pill.active .pulse { animation: pulse 2s ease-in-out infinite; } }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--good) 0%, transparent); } }
+.btn { font: inherit; font-size: 14px; font-weight: 500; border: 0; border-radius: var(--r); padding: 7px 14px; cursor: pointer; }
+.btn.primary { background: var(--ink); color: var(--surface); }
+.btn.primary:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn.ghost { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px var(--axis); }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn.danger { background: none; color: var(--crit-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--critical) 45%, transparent); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.confirm { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--critical) 40%, transparent); padding: 12px 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+
+/* Progression et chronologie */
+.progress-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-items: center; }
+.bar { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; display: flex; gap: 2px; }
+.bar i { display: block; height: 100%; }
+.timeline-key { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); }
+.timeline-key span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 8px; border-radius: 2px; display: inline-block; }
+
+main { display: grid; gap: 26px; padding-block: 8px 56px; }
+section { display: grid; gap: 14px; }
+.sec-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.sec-head h2 { margin: 0; font-family: var(--font-cond); font-weight: 600; font-size: 21px; }
+.sec-head p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.card { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 16px; display: grid; gap: 8px; min-width: 0; align-content: start; }
+.card h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.card .desc { margin: 0; font-size: 13px; color: var(--muted); max-width: 72ch; }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 960px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } }
+.chart { width: 100%; min-width: 0; }
+.h-spec { height: 240px; } .h-m { height: 220px; }
+canvas.wf { width: 100%; height: 150px; display: block; border-radius: 4px; image-rendering: pixelated; }
+.key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--ink-2); }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.ln { width: 16px; height: 0; border-top: 2px solid; display: inline-block; }
+.linkbtn { font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 0; padding: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 500; color: var(--ink-2); font-size: 12px; }
+td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.dotk { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+.code { font-family: var(--font-mono); font-size: 12px; }
+.code.ok { color: var(--good-ink); } .code.bad { color: var(--crit-ink); }
+
+/* Santé */
+.health { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 960px) { .health { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .health { grid-template-columns: minmax(0, 1fr); } }
+.hcard { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 12px 14px; display: grid; gap: 4px; min-width: 0; }
+.hcard .label { font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+.hcard .value { font-size: 22px; font-weight: 600; line-height: 1.2; }
+.hcard .value small { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.hcard .sub { font-size: 12.5px; color: var(--muted); }
+.meter { height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--ink-2); border-radius: 3px; }
+.meter.warn i { background: var(--warning); } .meter.bad i { background: var(--critical); }
+.ico { width: 15px; height: 15px; display: inline-block; vertical-align: -3px; flex: none; }
+
+/* Avant lancement */
+.cores { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; align-items: end; height: 110px; }
+.core { display: grid; gap: 4px; justify-items: center; height: 100%; grid-template-rows: 1fr auto; }
+.core .col { width: 100%; background: var(--track); border-radius: 4px; position: relative; overflow: hidden; }
+.core .col i { position: absolute; inset: auto 0 0 0; background: var(--ink-2); border-radius: 4px 4px 0 0; }
+.core .col i.warn { background: var(--warning); } .core .col i.bad { background: var(--critical); }
+.core span { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+.verdict-box { border-radius: var(--r); padding: 12px 14px; display: grid; gap: 4px; font-size: 14px; }
+.verdict-box.warn { background: color-mix(in srgb, var(--warning) 14%, var(--surface)); }
+.verdict-box.ok { background: color-mix(in srgb, var(--good) 9%, var(--surface)); }
+.verdict-box.bad { background: color-mix(in srgb, var(--critical) 10%, var(--surface)); }
+.verdict-box b { font-weight: 600; }
+.props { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.props li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; font-size: 13.5px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.props .gain { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-2); }
+.stack { display: flex; height: 26px; border-radius: 4px; overflow: hidden; gap: 2px; background: var(--track); }
+.stack i { display: grid; place-items: center; font-style: normal; font-size: 11.5px; color: #fff; white-space: nowrap; overflow: hidden; }
+.dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; font-size: 13.5px; margin: 0; }
+.dl dt { color: var(--ink-2); } .dl dd { margin: 0; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; cursor: pointer; }
+.check input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--ink); flex: none; }
+.launch { background: var(--surface); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--ring); padding: 16px 18px; display: grid; gap: 12px; }
+.note-ok { font-size: 14px; color: var(--good-ink); }
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+footer .wrap { padding-block: 16px 28px; }
+</style>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M2 15 Q6 4 11 11 T20 7" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linecap="round"/><path d="M2 18 Q7 9 11 14 T20 12" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linecap="round"/></svg>openDualSDR</div>
+    <nav class="tabs" aria-label="Station"><span aria-current="page">Tableau de bord</span><span>Campagnes</span><span>Qualification</span><span>Installation</span><span>Réglages</span></nav>
+    <span class="mock-flag">Maquette P0, données simulées</span>
+  </div>
+</header>
+<div class="viewbar"><div class="wrap"><div class="seg" id="view" aria-label="Vue"><button data-v="live" aria-pressed="true">Campagne en cours</button><button data-v="prep" aria-pressed="false">Avant lancement</button></div></div></div>
+
+<!-- ================= VUE EN COURS ================= -->
+<div id="v-live">
+  <div class="wrap head">
+    <div class="eyebrow">Campagne en cours · mode simultané · bande automatique</div>
+    <div class="head-row">
+      <h1>Delta loop contre dipôle, 40 m</h1>
+      <div class="actions">
+        <span class="pill active" id="state-pill"><span class="pulse"></span><span id="state-word">Bande active</span></span>
+        <button class="btn ghost" id="btn-pause">Mettre en pause</button>
+        <button class="btn danger" id="btn-stop">Arrêter la campagne</button>
+      </div>
+    </div>
+    <div class="confirm" id="confirm-stop" hidden>
+      <span>Arrêter la campagne maintenant ? Les mesures déjà prises sont conservées et la campagne sera marquée « abandonnée ».</span>
+      <span class="actions"><button class="btn danger" id="stop-yes">Arrêter</button><button class="btn ghost" id="stop-no">Continuer la campagne</button></span>
+    </div>
+    <div class="meta"><span>7,000–7,200 MHz</span><span>2 × SDRplay RSP2 Pro</span><span>Qualifiée ±0,4 dB</span><span>Démarrée le <b>1er nov. 2026 à 18 h 00</b></span><span>Fin prévue le <b>15 nov. à 18 h 00</b></span></div>
+    <div class="progress-row">
+      <div class="bar" id="timeline" aria-label="Chronologie de la campagne"></div>
+      <span class="mono" style="font-size:13px;color:var(--ink-2)" id="elapsed"></span>
+      <div class="timeline-key"><span><i class="sw" style="background:var(--good)"></i>Active</span><span><i class="sw" style="background:var(--calm)"></i>Calme (bruit seul)</span><span><i class="sw" style="background:var(--critical)"></i>Interrompue</span><span><i class="sw" style="background:var(--track)"></i>À venir</span></div>
+    </div>
+  </div>
+
+  <main class="wrap">
+    <section>
+      <div class="sec-head"><h2>Spectre en direct</h2><p>Voies A et B superposées ; signaux retenus encadrés, avec leur classe.</p></div>
+      <div class="card">
+        <div class="card-head">
+          <div class="key"><span><i class="ln" style="border-color:var(--s1)"></i>A · delta loop</span><span><i class="ln" style="border-color:var(--s2)"></i>B · dipôle</span><span><i class="sw" style="background:var(--sig)"></i>Signal retenu</span></div>
+          <button class="linkbtn" id="btn-anim" aria-pressed="false">Figer l'affichage</button>
+        </div>
+        <div id="c-spec" class="chart h-spec" role="img" aria-label="Spectre en direct des voies A et B"></div>
+        <div class="eyebrow" style="font-size:11px">Chute d'eau, voie A, 2 dernières minutes</div>
+        <canvas class="wf" id="wf" width="600" height="150" aria-label="Chute d'eau de la voie A"></canvas>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Mesures en direct</h2><p>Dernière fenêtre de 10 s, écart A − B.</p></div>
+      <div class="grid2">
+        <div class="card">
+          <div class="tbl-wrap"><table id="live-table"></table></div>
+        </div>
+        <div class="card">
+          <h3>Écart A − B, 6 dernières heures</h3><p class="desc">Toutes classes, fenêtres de 1 min.</p>
+          <div id="c-last" class="chart h-m" role="img" aria-label="Écart A moins B sur les 6 dernières heures"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Santé de la station</h2></div>
+      <div class="health" id="health"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ================= VUE AVANT LANCEMENT ================= -->
+<div id="v-prep" hidden>
+  <div class="wrap head">
+    <div class="eyebrow">Nouvelle campagne · étape 4 sur 4 : vérifications</div>
+    <div class="head-row"><h1>Six antennes, 40 m, 7 jours</h1></div>
+    <div class="meta"><span>6 × RTL-SDR Blog V4</span><span>Mode simultané · bande automatique · 8 signaux</span><span>Plage 7,000–7,200 MHz · 250 kS/s</span><span>Décodage FT8/WSPR activé</span></div>
+  </div>
+  <main class="wrap">
+    <section>
+      <div class="sec-head"><h2>Test de charge</h2><p>Toute la chaîne a tourné 3 min avec les réglages réels : 6 SDR, traitements et décodage.</p></div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Processeur, par cœur</h3><p class="desc">Un processus par SDR. Moyenne sur 3 min ; la pointe est indiquée en dessous.</p>
+          <div class="cores" id="cores"></div>
+          <div class="verdict-box warn" id="load-verdict"></div>
+        </div>
+        <div class="card">
+          <h3>Mesures du test</h3>
+          <div class="tbl-wrap"><table id="load-table"></table></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Réglages plus légers proposés</h3><p class="desc">Charge estimée si l'on applique un seul de ces changements.</p>
+        <ul class="props" id="props"></ul>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Espace et volume</h2></div>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><h3>Espace disque local</h3>
+            <div class="seg" id="disk-ex" aria-label="Exemple d'espace libre"><button data-v="ok" aria-pressed="true">112 Go libres</button><button data-v="full" aria-pressed="false">6 Go libres</button></div>
+          </div>
+          <div class="stack" id="disk-stack" aria-label="Répartition du volume estimé"></div>
+          <dl class="dl" id="disk-dl"></dl>
+          <div class="verdict-box ok" id="disk-verdict"></div>
+        </div>
+        <div class="card">
+          <h3>Volume publié sur WordPress</h3>
+          <dl class="dl" id="wp-dl"></dl>
+          <div class="verdict-box ok" id="wp-verdict"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="launch">
+        <label class="check"><input type="checkbox" id="ack-load"> Lancer malgré la charge limite (74 % du processeur). Si des échantillons sont perdus pendant la campagne, les mesures concernées seront codées PERTE_FLUX.</label>
+        <div class="actions"><button class="btn primary" id="go" disabled>Lancer la campagne</button><button class="btn ghost" id="lighter">Appliquer un réglage plus léger</button><span id="go-msg"></span></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer><div class="wrap">Maquette de la phase P0 d'openDualSDR (page locale de la station). Spectre, mesures et état de la station sont simulés.</div></footer>
+
+<script src="vendor/echarts.min.js"></script>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const NF1 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const NF0 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const f1 = v => NF1.format(v).replace("-", "−");
+const s1 = v => (v > 0.049 ? "+" : "") + f1(v);
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = mulberry32(9);
+const gauss = () => { let u = 0, v = 0; while (u === 0) u = rnd(); while (v === 0) v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const ICON = {
+  ok: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--good)"/><path d="M4.6 8.2l2.2 2.2 4.6-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  warn: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l7 12.5H1z" fill="var(--warning)"/><path d="M8 6v4" stroke="#0b0b0b" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="12" r="1" fill="#0b0b0b"/></svg>`,
+  bad: `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="var(--critical)"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+};
+
+/* ================= Vue en cours ================= */
+const NB = 600, F0 = 7.0, F1 = 7.2;
+const freqs = Array.from({ length: NB }, (_, i) => F0 + (F1 - F0) * i / (NB - 1));
+// signaux retenus : centre (MHz), largeur (kHz), classe, niveau A (dBFS), écart B − A, type de variation
+const SIG = [
+  { f: 7.0035, w: 0.25, c: "Porteuse/CW", lvl: -92, d: -1.4, kind: "cw" },
+  { f: 7.0230, w: 0.25, c: "Porteuse/CW", lvl: -97, d: -1.9, kind: "cw" },
+  { f: 7.0386, w: 0.2, c: "Numérique (WSPR)", lvl: -104, d: -1.1, kind: "num" },
+  { f: 7.0475, w: 1.0, c: "Numérique (FT4)", lvl: -101, d: -1.6, kind: "num" },
+  { f: 7.0755, w: 3.0, c: "Numérique (FT8)", lvl: -99, d: -1.2, kind: "ft8" },
+  { f: 7.0900, w: 2.7, c: "SSB", lvl: -88, d: -2.4, kind: "ssb" },
+  { f: 7.1450, w: 2.7, c: "SSB", lvl: -85, d: -1.8, kind: "ssb" },
+  { f: 7.1820, w: 2.7, c: "SSB", lvl: -91, d: -2.9, kind: "ssb" },
+];
+const OTHERS = [{ f: 7.012, w: 0.3, lvl: -108 }, { f: 7.118, w: 2.7, lvl: -102 }, { f: 7.160, w: 2.7, lvl: -106 }, { f: 7.199, w: 5, lvl: -96 }];
+let frame = 0;
+function spectrum(offsetB) {
+  const out = new Float32Array(NB);
+  for (let i = 0; i < NB; i++) out[i] = -121 + 1.5 * Math.sin(i / 70) + gauss() * 1.6 + (offsetB ? 0.6 : 0);
+  const add = (s, lvl) => {
+    const half = Math.max(0.0004, s.w / 2000);
+    for (let i = 0; i < NB; i++) { const df = Math.abs(freqs[i] - s.f); if (df < half * 1.6) { const shape = df < half ? 1 : Math.max(0, 1 - (df - half) / (half * 0.6)); out[i] = Math.max(out[i], lvl - (1 - shape) * 30 + gauss() * 1.2); } }
+  };
+  SIG.forEach((s, k) => {
+    let mod = 0;
+    if (s.kind === "ssb") mod = -18 * Math.max(0, Math.sin(frame / (3 + k) + k) * 0.5 + 0.5 * Math.sin(frame / 1.3 + k * 2)) ** 2;
+    if (s.kind === "num") mod = (Math.floor(frame / 30 + k) % 2) ? -40 : 0;
+    if (s.kind === "ft8") mod = (frame % 60) < 50 ? 0 : -40;
+    add(s, s.lvl + mod + (offsetB ? s.d : 0) + Math.sin(frame / 9 + k) * 2.5);
+  });
+  OTHERS.forEach(o => add(o, o.lvl + (offsetB ? -1.5 : 0)));
+  return out;
+}
+const charts = {};
+const chart = id => charts[id] || (charts[id] = echarts.init($(id)));
+const T = () => ({ ink: css("--ink"), ink2: css("--ink-2"), muted: css("--muted"), line: css("--line"), axis: css("--axis"), surface: css("--surface"), sig: css("--sig"), s1: css("--s1"), s2: css("--s2"), good: css("--good"), critical: css("--critical") });
+function base(t) {
+  return { animation: false, textStyle: { fontFamily: css("--font-body"), color: t.ink2, fontSize: 12 },
+    tooltip: { backgroundColor: t.surface, borderColor: t.line, borderWidth: 1, padding: [8, 10], textStyle: { color: t.ink, fontSize: 12.5 }, extraCssText: "box-shadow:0 4px 16px rgba(0,0,0,.12);border-radius:6px;" } };
+}
+const ax = t => ({ axisLine: { lineStyle: { color: t.axis } }, axisTick: { show: false }, axisLabel: { color: t.muted, fontSize: 11.5 }, splitLine: { lineStyle: { color: t.line } } });
+let specA, specB;
+function specOption(t) {
+  const o = base(t);
+  o.grid = { left: 64, right: 14, top: 22, bottom: 30 };
+  o.xAxis = { type: "value", min: F0, max: F1, interval: 0.025, ...ax(t), axisLabel: { color: t.muted, formatter: v => v.toFixed(3).replace(".", ",") }, splitLine: { show: false } };
+  o.yAxis = { type: "value", min: -126, max: -76, interval: 10, ...ax(t), axisLabel: { color: t.muted, formatter: v => `${String(v).replace("-", "−")} dBFS` } };
+  o.tooltip = { ...o.tooltip, trigger: "axis", formatter: ps => `<b>${ps[0].value[0].toFixed(4).replace(".", ",")} MHz</b><br>` + ps.map(p => `${p.seriesName} : ${f1(p.value[1])} dBFS`).join("<br>") };
+  o.series = [
+    { type: "line", name: "B · dipôle", data: [], symbol: "none", lineStyle: { width: 1.2, color: t.s2 }, itemStyle: { color: t.s2 } },
+    { type: "line", name: "A · delta loop", data: [], symbol: "none", lineStyle: { width: 1.2, color: t.s1 }, itemStyle: { color: t.s1 },
+      markArea: { silent: true, itemStyle: { color: t.sig }, label: { show: true, position: "insideTop", color: t.ink2, fontSize: 10.5 },
+        data: SIG.map(s => [{ xAxis: s.f - Math.max(0.0015, s.w / 2000), name: s.c.split(" ")[0].replace("Porteuse/CW", "CW").replace("Numérique", "Num.") }, { xAxis: s.f + Math.max(0.0015, s.w / 2000) }]) } },
+  ];
+  return o;
+}
+function pushSpec() {
+  specA = spectrum(false); specB = spectrum(true);
+  const da = [], db = [];
+  for (let i = 0; i < NB; i++) { da.push([freqs[i], specA[i]]); db.push([freqs[i], specB[i]]); }
+  chart("c-spec").setOption({ series: [{ data: db }, { data: da }] });
+}
+
+/* Chute d'eau : rampe séquentielle bleue lue dans les jetons du thème. */
+let wfRamp = [];
+function buildRamp() {
+  const stops = ["--wf0", "--wf1", "--wf2", "--wf3", "--wf4", "--wf5"].map(n => css(n));
+  const hex = h => { const n = parseInt(h.replace("#", ""), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+  const rgb = stops.map(hex); wfRamp = [];
+  for (let i = 0; i < 256; i++) { const x = i / 255 * (rgb.length - 1), k = Math.min(rgb.length - 2, Math.floor(x)), t = x - k; wfRamp.push(rgb[k].map((c, j) => Math.round(c + (rgb[k + 1][j] - c) * t))); }
+}
+const wf = $("wf"), wctx = wf.getContext("2d");
+function wfLine(spec) {
+  const img = wctx.getImageData(0, 0, wf.width, wf.height - 1);
+  wctx.putImageData(img, 0, 1);
+  const row = wctx.createImageData(wf.width, 1);
+  for (let x = 0; x < wf.width; x++) {
+    const v = spec[Math.floor(x / wf.width * NB)];
+    const idx = Math.max(0, Math.min(255, Math.round((v + 124) / 44 * 255)));
+    const c = wfRamp[idx]; row.data.set([c[0], c[1], c[2], 255], x * 4);
+  }
+  wctx.putImageData(row, 0, 0);
+}
+function seedWaterfall() { wctx.fillStyle = css("--wf0"); wctx.fillRect(0, 0, wf.width, wf.height); for (let i = 0; i < wf.height; i++) { frame++; wfLine(spectrum(false)); } }
+
+/* Table des mesures en direct */
+function liveTable() {
+  const rows = SIG.map((s, k) => {
+    const a = s.lvl + Math.sin(frame / 9 + k) * 2.5 + gauss() * 0.4 - (s.kind === "ssb" ? 4 : 0);
+    const dAB = -s.d + gauss() * (s.kind === "ssb" ? 0.8 : 0.25);
+    const code = (k === 6 && Math.floor(frame / 40) % 3 === 0) ? "CHEVAUCHEMENT" : "OK";
+    const silent = (s.kind === "num" && Math.floor(frame / 30 + k) % 2) || (s.kind === "ft8" && frame % 60 >= 50);
+    return `<tr><td class="num">${s.f.toFixed(4).replace(".", ",")}</td><td>${s.c}</td><td class="num">${f1(s.w)} kHz</td>
+      <td class="num"><i class="dotk" style="background:var(--s1)"></i>${silent ? "—" : f1(a)}</td><td class="num"><i class="dotk" style="background:var(--s2)"></i>${silent ? "—" : f1(a - dAB)}</td>
+      <td class="num">${silent ? "—" : s1(dAB)}</td><td><span class="code ${silent ? "" : (code === "OK" ? "ok" : "bad")}">${silent ? "silence" : code}</span></td></tr>`;
+  }).join("");
+  $("live-table").innerHTML = `<thead><tr><th class="num">MHz</th><th>Classe</th><th class="num">Largeur</th><th class="num">A (dBFS)</th><th class="num">B (dBFS)</th><th class="num">A − B</th><th>Code</th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+/* Écart des 6 dernières heures */
+const NOW = Date.UTC(2026, 10, 4, 11, 30);
+const LAST = Array.from({ length: 360 }, (_, i) => { const ts = NOW - (359 - i) * 60e3; const h = ((ts / 36e5) % 24 + 25) % 24; const w = Math.min(1, Math.max(0, (h - 6.5) / 2)); return [ts, 2.1 * w + 0.6 * (1 - w) + gauss() * 0.45]; });
+const fmtT = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" });
+function renderLast(t) {
+  const o = base(t);
+  o.grid = { left: 48, right: 14, top: 14, bottom: 30 };
+  o.xAxis = { type: "time", ...ax(t), splitLine: { show: false }, axisLabel: { color: t.muted, formatter: v => fmtT.format(v) } };
+  o.yAxis = { type: "value", min: -2, max: 4, interval: 1, ...ax(t), axisLabel: { color: t.muted, formatter: v => `${v > 0 ? "+" : ""}${String(v).replace("-", "−")} dB` } };
+  o.tooltip = { ...o.tooltip, trigger: "axis", formatter: ps => `<b>${fmtT.format(ps[0].value[0])}</b><br>A − B : ${s1(ps[0].value[1])} dB` };
+  o.series = [{ type: "line", data: LAST, symbol: "none", lineStyle: { width: 1.6, color: t.s1 },
+    markArea: { silent: true, itemStyle: { color: css("--sig") }, data: [[{ yAxis: -0.4 }, { yAxis: 0.4 }]] },
+    markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: t.axis, type: "solid" }, data: [{ yAxis: 0 }] } }];
+  chart("c-last").setOption(o, true);
+}
+
+/* Chronologie : 14 jours, 2 j 17 h 30 écoulés */
+function renderTimeline() {
+  const segs = [["good", 0.10], ["calm", 0.006], ["good", 0.045], ["critical", 0.002], ["good", 0.03], ["calm", 0.005], ["good", 0.007]];
+  const used = segs.reduce((s, x) => s + x[1], 0);
+  $("timeline").innerHTML = segs.map(([c, w]) => `<i style="flex:${w};background:var(--${c === "calm" ? "calm" : c})" title="${c === "good" ? "Active" : c === "calm" ? "Calme" : "Interrompue"}"></i>`).join("") + `<i style="flex:${1 - used};background:transparent"></i>`;
+  $("elapsed").textContent = `jour 3 sur 14 · 2 j 17 h écoulés`;
+}
+
+/* Santé */
+function renderHealth() {
+  const cards = [
+    { l: "Voie A · RSP2 Pro n° 1803xxxx", v: "0", u: "échantillon perdu", s: "Depuis le début · flux 250 kS/s", i: "ok" },
+    { l: "Voie B · RSP2 Pro n° 1804xxxx", v: "1 920", u: "perdus", s: "Une coupure USB de 8 s le 3 nov. à 04 h 12, reprise automatique", i: "warn" },
+    { l: "Processeur", v: "31", u: "%", s: "Pointe 46 % pendant le décodage", i: "ok", m: 31 },
+    { l: "Disque", v: "1,9", u: "Go utilisés", s: "Estimation finale 9,8 Go · 104 Go libres", i: "ok", m: 19 },
+    { l: "Alignement A/B", v: "1,7", u: "ms", s: "Tolérance SSB : 5 ms", i: "ok" },
+    { l: "Horloge", v: "+3", u: "ms", s: "Synchronisée (NTP), dernière vérification il y a 4 min", i: "ok" },
+    { l: "Envoi WordPress", v: "0", u: "lot en attente", s: "Dernier envoi accepté à 11 h 20 · 1,1 Mo sur 5 Mo", i: "ok", m: 22 },
+    { l: "Bande", v: "8", u: "signaux suivis", s: "Réévaluation dans 37 min", i: "ok" },
+  ];
+  $("health").innerHTML = cards.map(c => `<div class="hcard"><div class="label">${ICON[c.i]}${c.l}</div><div class="value">${c.v} <small>${c.u}</small></div>${c.m != null ? `<div class="meter"><i style="width:${c.m}%"></i></div>` : ""}<div class="sub">${c.s}</div></div>`).join("");
+}
+
+let running = !reduced, timer = null;
+function tick() { frame++; pushSpec(); wfLine(specA); if (frame % 5 === 0) liveTable(); }
+function startAnim() { if (timer) return; timer = setInterval(tick, 250); }
+function stopAnim() { clearInterval(timer); timer = null; }
+$("btn-anim").addEventListener("click", e => {
+  running = !running; running ? startAnim() : stopAnim();
+  e.target.textContent = running ? "Figer l'affichage" : "Reprendre l'affichage"; e.target.setAttribute("aria-pressed", String(!running));
+});
+$("btn-stop").addEventListener("click", () => { $("confirm-stop").hidden = false; });
+$("stop-no").addEventListener("click", () => { $("confirm-stop").hidden = true; });
+$("stop-yes").addEventListener("click", () => { $("confirm-stop").innerHTML = "<span>Maquette : dans la station, la campagne passerait à l'état « abandonnée ».</span>"; });
+$("btn-pause").addEventListener("click", e => {
+  const paused = e.target.dataset.p === "1";
+  e.target.dataset.p = paused ? "0" : "1"; e.target.textContent = paused ? "Mettre en pause" : "Reprendre";
+  $("state-pill").className = "pill " + (paused ? "active" : "calm"); $("state-word").textContent = paused ? "Bande active" : "En pause";
+});
+
+/* ================= Vue avant lancement ================= */
+const CORES = [78, 74, 81, 70, 76, 72, 64, 79];
+const PEAK = [92, 88, 95, 84, 90, 86, 77, 93];
+function renderPrep() {
+  $("cores").innerHTML = CORES.map((v, i) => `<div class="core" title="Cœur ${i}: moyenne ${v} %, pointe ${PEAK[i]} %"><div class="col"><i class="${v > 85 ? "bad" : v > 70 ? "warn" : ""}" style="height:${v}%"></i></div><span>${v} %</span></div>`).join("");
+  $("load-verdict").innerHTML = `<div>${ICON.warn} <b>Limite</b> : 74 % en moyenne, pointes à 95 % pendant le décodage FT8.</div><div style="color:var(--ink-2);font-size:13px">Lancement possible après acceptation. Seuils : OK sous 70 %, refus au-delà de 85 % ou en cas de pertes répétées.</div>`;
+  const rows = [
+    ["Marge temps réel", "1,6 ×", "ok", "Traitement d'un bloc en 62 % de sa durée"],
+    ["Échantillons perdus", "0", "ok", "Sur les 6 SDR, 3 min"],
+    ["Erreurs USB", "2", "warn", "SDR n° 0005 et 0006, même contrôleur USB"],
+    ["Mémoire", "1,4 Go", "ok", "Sur 16 Go"],
+    ["Écriture disque", "0,9 Mo/s", "ok", "Disque mesuré à 180 Mo/s"],
+    ["Alignement entre voies", "p99 3,4 ms", "ok", "Tolérance SSB 5 ms"],
+  ];
+  $("load-table").innerHTML = `<thead><tr><th>Mesure</th><th class="num">Valeur</th><th>Remarque</th></tr></thead><tbody>${rows.map(r => `<tr><td>${ICON[r[2]]} ${r[0]}</td><td class="num">${r[1]}</td><td style="color:var(--ink-2);white-space:normal">${r[3]}</td></tr>`).join("")}</tbody>`;
+  const props = [
+    ["Désactiver le décodage FT8/WSPR", "61 %", "Perd les indicatifs, distances et mesures guidées"],
+    ["Réduire la plage à 150 kHz (7,000–7,150)", "58 %", "Exclut les SSB du haut de bande"],
+    ["Brancher les SDR 0005 et 0006 sur un autre contrôleur USB", "73 %", "Supprime les erreurs USB, charge inchangée"],
+    ["Passer à 5 SDR", "63 %", "Retire la mini-whip (F)"],
+  ];
+  $("props").innerHTML = props.map(p => `<li><span>${p[0]}<br><span style="font-size:12.5px;color:var(--muted)">${p[2]}</span></span><span class="gain">→ ${p[1]}</span><button class="btn ghost" style="padding:4px 10px;font-size:13px">Appliquer</button></li>`).join("");
+  renderDisk("ok");
+  $("wp-dl").innerHTML = `<dt>Limite fixée par l'administrateur</dt><dd>5,0 Mo</dd><dt>Volume prévu à la fenêtre de 5 min</dt><dd>7,9 Mo</dd><dt>Volume prévu à la fenêtre de 15 min</dt><dd>2,9 Mo</dd><dt>Écarts entre paires (15 paires)</dt><dd>résumés par période</dd>`;
+  $("wp-verdict").className = "verdict-box ok";
+  $("wp-verdict").innerHTML = `<div>${ICON.ok} <b>Adapté</b> : la station publiera des fenêtres de 15 min et des écarts entre paires résumés par période du jour.</div><div style="color:var(--ink-2);font-size:13px">La base locale garde les fenêtres de 5 min. Le nombre d'antennes n'est jamais un motif de refus.</div>`;
+}
+function renderDisk(ex) {
+  const parts = [["Mesures brutes", 7.4, "var(--s1)"], ["Décodages", 0.9, "var(--s2)"], ["Agrégats", 0.4, "var(--ink-2)"], ["Journaux", 0.1, "var(--muted)"]];
+  const total = parts.reduce((s, p) => s + p[1], 0), need = Math.max(total * 1.2, total + 1), free = ex === "ok" ? 112 : 6;
+  $("disk-stack").innerHTML = parts.map(p => `<i style="flex:${p[1]};background:${p[2]}" title="${p[0]} : ${f1(p[1])} Go">${p[1] > 1.5 ? p[0] : ""}</i>`).join("");
+  $("disk-dl").innerHTML = parts.map(p => `<dt><i class="dotk" style="background:${p[2]};border-radius:2px"></i>${p[0]}</dt><dd>${f1(p[1])} Go</dd>`).join("") +
+    `<dt><b>Estimation de la campagne</b></dt><dd><b>${f1(total)} Go</b></dd><dt>Nécessaire avec la marge de 20 %</dt><dd>${f1(need)} Go</dd><dt>Espace libre</dt><dd>${NF0.format(free)} Go</dd>`;
+  const ok = free >= need, box = $("disk-verdict");
+  box.className = "verdict-box " + (ok ? "ok" : "bad");
+  box.innerHTML = ok
+    ? `<div>${ICON.ok} <b>Suffisant</b>. L'espace sera surveillé pendant toute la campagne.</div>`
+    : `<div>${ICON.bad} <b>Lancement refusé</b> : il manque ${f1(need - free)} Go.</div><div style="color:var(--ink-2);font-size:13px">Libérez de la place, choisissez un autre dossier de données ou raccourcissez la campagne (4 jours tiennent dans 6 Go).</div>`;
+  document.querySelectorAll("#disk-ex button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === ex)));
+  diskOK = ok; updateGo();
+}
+let diskOK = true;
+function updateGo() { $("go").disabled = !($("ack-load").checked && diskOK); }
+$("disk-ex").addEventListener("click", e => { const b = e.target.closest("button"); if (b) renderDisk(b.dataset.v); });
+$("ack-load").addEventListener("change", updateGo);
+$("go").addEventListener("click", () => { $("go-msg").innerHTML = `<span class="note-ok">${ICON.ok} Campagne lancée (maquette).</span>`; });
+$("lighter").addEventListener("click", () => { document.getElementById("props").scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" }); });
+
+/* ================= Vues et thème ================= */
+let view = "live";
+function setView(v) {
+  view = v;
+  $("v-live").hidden = v !== "live"; $("v-prep").hidden = v !== "prep";
+  document.querySelectorAll("#view button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+  if (v === "live") { Object.values(charts).forEach(c => c.resize()); if (running) startAnim(); } else stopAnim();
+}
+$("view").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setView(b.dataset.v); });
+function renderTheme() {
+  const t = T();
+  chart("c-spec").setOption(specOption(t), true);
+  buildRamp(); seedWaterfall(); pushSpec(); renderLast(t);
+}
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderTheme);
+new MutationObserver(renderTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+const ro = new ResizeObserver(() => Object.values(charts).forEach(c => c.resize()));
+document.querySelectorAll(".chart").forEach(el => ro.observe(el));
+
+renderTimeline(); renderHealth(); liveTable(); renderPrep(); renderTheme();
+if (running) startAnim(); else $("btn-anim").textContent = "Reprendre l'affichage";
+</script>
