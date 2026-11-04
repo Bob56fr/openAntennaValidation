@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import filecmp
 import shutil
 import subprocess
 import sys
@@ -38,5 +37,7 @@ def test_diagrams_are_up_to_date(tmp_path: Path) -> None:
     produced = sorted(p.name for p in tmp_path.glob("*.svg") if p.name != "template.svg")
     assert produced == sorted(p.name for p in SCHEMAS.glob("*.svg") if p.name != "template.svg")
     for name in produced:
-        assert filecmp.cmp(tmp_path / name, SCHEMAS / name, shallow=False), \
+        # Compared as text: Git may check the files out with CRLF line endings on Windows.
+        produced_text = (tmp_path / name).read_text(encoding="utf-8").splitlines()
+        assert produced_text == (SCHEMAS / name).read_text(encoding="utf-8").splitlines(), \
             f"{name} : relancer python docs/schemas/generate.py"
