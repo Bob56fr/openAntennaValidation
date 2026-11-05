@@ -133,6 +133,7 @@ def campaign_meta(db: Database, uuid: str, *, locator_chars: int = 6) -> dict[st
             "height": ch["height_note"] or (f"{ch['height_m']} m" if ch["height_m"] else ""),
             "polarization": POLARIZATIONS.get(ch["polarization"], ch["polarization"]),
             "orientation": ch["orientation_note"],
+            "azimuth": ch["azimuth_deg"],  # main lobe of a directional antenna (degrees)
         })
 
     segments = []

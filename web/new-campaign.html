@@ -84,7 +84,7 @@
         <h2>Fréquences</h2>
         <div class="row">
           <div class="ctl"><span class="eyebrow">Mode de mesure</span>
-            <div class="seg" id="mode"><button type="button" data-v="fixed" aria-pressed="true">Fréquences imposées</button><button type="button" data-v="auto" aria-pressed="false">Bande automatique</button></div>
+            <div class="seg" id="mode"><button type="button" data-v="fixed" aria-pressed="true">Fréquences imposées</button><button type="button" data-v="auto" aria-pressed="false">Bande automatique</button><button type="button" data-v="digital" aria-pressed="false">Modes numériques</button></div>
           </div>
           <div class="ctl"><label class="eyebrow" for="band">Bande</label><select id="band"></select></div>
         </div>
@@ -92,6 +92,12 @@
           <div class="ctl"><label class="eyebrow" for="fmin">Fmin (kHz)</label><input id="fmin" type="number" step="0.1" min="1000" max="30000" style="width:130px"></div>
           <div class="ctl"><label class="eyebrow" for="fmax">Fmax (kHz)</label><input id="fmax" type="number" step="0.1" min="1000" max="30000" style="width:130px"></div>
           <div class="ctl"><label class="eyebrow" for="nmax">Signaux suivis au plus</label><input id="nmax" type="number" min="1" max="20" step="1" style="width:100px"></div>
+        </div>
+        <div id="digital-fields" class="row" hidden>
+          <div class="ctl"><span class="eyebrow">Mode décodé</span>
+            <div class="seg" id="dmode"><button type="button" data-v="ft8" aria-pressed="true">FT8</button><button type="button" data-v="ft4" aria-pressed="false">FT4</button><button type="button" data-v="wspr" aria-pressed="false">WSPR</button></div>
+          </div>
+          <div class="ctl"><span class="eyebrow">Sous-bande (fréquence de base)</span><span class="mono" id="dial">—</span></div>
         </div>
         <div id="fixed-fields">
         <div class="freq-row freq-head"><span>Fréquence (kHz)</span><span>Classe</span><span>Largeur (Hz)</span><span></span></div>

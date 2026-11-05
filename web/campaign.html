@@ -111,6 +111,27 @@
       </div>
     </section>
 
+    <section id="sec-digital" hidden>
+      <div class="sec-head"><h2>Stations décodées</h2><p id="dig-sub"></p></div>
+      <div class="tiles" id="dig-tiles"></div>
+      <div class="card"><div><h3>Carte des stations</h3><p class="desc" id="d-dmap"></p></div>
+        <div id="c-dmap" class="chart h-xl" role="img" aria-label="Carte des stations décodées, colorées par l'écart"></div></div>
+      <div class="grid2">
+        <div class="card"><div><h3>Écart selon la distance</h3><p class="desc" id="d-ddist"></p></div>
+          <div id="c-ddist" class="chart h-l" role="img" aria-label="Écart en fonction de la distance"></div></div>
+        <div class="card"><div><h3>Écart selon l'angle de départ</h3><p class="desc" id="d-dangle"></p></div>
+          <div id="c-dangle" class="chart h-l" role="img" aria-label="Écart en fonction de l'angle de départ estimé"></div></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><div><h3>Écart selon l'azimut</h3><p class="desc" id="d-dpolar"></p></div>
+          <div id="c-dpolar" class="chart h-l" role="img" aria-label="Diagramme polaire de l'écart selon l'azimut"></div></div>
+        <div class="card"><div><h3>Décodées par antenne</h3><p class="desc" id="d-dsets"></p></div>
+          <div id="c-dsets" class="chart h-l" role="img" aria-label="Stations décodées par chaque antenne"></div></div>
+      </div>
+      <div class="card"><div><h3>Par station</h3></div>
+        <div class="tbl-wrap"><table id="dig-table"></table></div></div>
+    </section>
+
     <section>
       <div class="sec-head"><h2>Installation</h2><p id="inst-sub"></p></div>
       <div class="ants" id="ants"></div>
@@ -144,6 +165,8 @@
   <footer><div class="wrap">openAntennaValidation, logiciel libre (GPLv3).</div></footer>
   <script src="/static/vendor/echarts.min.js"></script>
   <script src="/static/stats.js"></script>
+  <script src="/static/vendor/world-land.js"></script>
+  <script src="/static/digital.js"></script>
   <script src="/static/results.js"></script>
 </body>
 </html>

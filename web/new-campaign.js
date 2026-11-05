@@ -16,6 +16,14 @@ const ICON = {
 let setup = null;
 let freqs = [];
 let mode = "fixed";
+let dmode = "ft8";
+const DIGITAL = { ft8: { label: "FT8", slot: 15, perInput: 2, lo: 200, hi: 3000 },
+  ft4: { label: "FT4", slot: 7.5, perInput: 2, lo: 200, hi: 3000 },
+  wspr: { label: "WSPR", slot: 120, perInput: 1, lo: 1400, hi: 1600 } };
+function subband() {
+  const d = setup.digital || { subbands: [] };
+  return d.subbands.find((b) => b.band === $("band").value && b.mode === dmode) || null;
+}
 let reception = "switched";
 // Mode simultané : SDR retenus (numéro de série, antenne), étalonnages de l'ensemble, test de charge.
 let sim = [];
@@ -128,8 +136,31 @@ function update() {
   const cov = $("coverage");
   $("auto-fields").hidden = mode !== "auto";
   $("fixed-fields").hidden = mode !== "fixed";
+  $("digital-fields").hidden = mode !== "digital";
+  $("rate-ctl").hidden = simul || mode === "digital";
   document.querySelectorAll("#mode button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === mode)));
-  if (mode === "auto") {
+  document.querySelectorAll("#dmode button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === dmode)));
+  if (mode === "digital") {
+    const sb = subband(), dig = setup.digital || {}, m = DIGITAL[dmode];
+    $("dial").textContent = sb ? `${NF1.format(sb.dial_hz / 1000)} kHz` : "—";
+    const bands = [...new Set((dig.subbands || []).filter((b) => b.mode === dmode).map((b) => b.band))];
+    const notes = [];
+    if (!sb) notes.push(`Pas de sous-bande ${m.label} sur cette bande : choisissez ${bands.join(", ")}.`);
+    if (!(dig.decoders || {})[dmode]) notes.push(`Décodeur de WSJT-X introuvable : installez WSJT-X sur cet ordinateur (Debian : paquet « wsjtx »).`);
+    else if (!(dig.encoders || {})[dmode]) notes.push(`Pas d'encodeur ${m.label} dans cette installation de WSJT-X (normal sous Windows pour FT4 et WSPR) : la mesure suivra les tons lus dans le signal, moins précise près du seuil de décodage.`);
+    if (!dig.locator) notes.push("Indiquez le locator de la station (page Installation) : il donne la distance et l'azimut des stations décodées.");
+    if (sb) {
+      const center = sb.dial_hz + 1500;
+      const pos = (hz) => `${((hz - (center - bw / 2)) / bw) * 100}%`;
+      cov.innerHTML = bw ? `<i style="left:${pos(sb.dial_hz + m.lo)};width:${((m.hi - m.lo) / bw) * 100}%"></i><span class="dc" style="left:50%"></span>` : "";
+      notes.unshift(simul
+        ? `${m.label} décodé sur chaque SDR à la fin de chaque créneau de ${NF1.format(m.slot).replace(",0", "")} s ; un message décodé sur une seule antenne est mesuré aussi sur les autres, aux mêmes tons et aux mêmes instants.`
+        : `${m.label} décodé à la fin de chaque créneau de ${NF1.format(m.slot).replace(",0", "")} s. Bascule entre deux créneaux, jamais pendant : ${dmode === "wspr" ? "un créneau par antenne, dans un ordre pseudo-aléatoire équilibré" : "deux créneaux par antenne, pour qu'une station qui émet un créneau sur deux soit reçue alternativement sur chacune"}.`);
+      renderQual(center);
+    } else { cov.innerHTML = ""; renderQual(null); }
+    $("freq-note").textContent = notes.join(" ");
+    $("freq-note").style.color = !sb || !(dig.decoders || {})[dmode] ? "var(--crit-ink)" : "";
+  } else if (mode === "auto") {
     const r = autoRange();
     if (r && bw) {
       const center = (r.lo + r.hi) / 2, fits = r.hi - r.lo + 10_000 <= bw;
@@ -158,7 +189,8 @@ function update() {
   // Plan : fenêtre, période, volume.
   const dur = Number($("dur").value) * Number($("unit").value);
   const win = (setup.windows.find(([h]) => dur / 3600 <= h) || setup.windows[setup.windows.length - 1])[1];
-  const period = Math.min(setup.period_s, win / 3);
+  const block = mode === "digital" && !simul ? 2 * DIGITAL[dmode].perInput * DIGITAL[dmode].slot : 0;
+  const period = block || Math.min(setup.period_s, win / 3);
   const n = mode === "auto" ? (Number($("nmax").value) || setup.max_signals) + 1 : Math.max(1, list.length);
   const nch = simul ? Math.max(2, used().length) : 2;
   const volume = (dur / period) * n * nch * 90 + (dur / win) * n * (nch + 1) * 260;
@@ -166,7 +198,7 @@ function update() {
   const rate = Number($("rate").value) || setup.rate_hz;
   $("plan").innerHTML = `<dt>Fenêtre d'agrégation</dt><dd>${win >= 60 ? `${win / 60} min` : `${win} s`}</dd>
     <dt>Une mesure par signal et par ${simul ? "SDR" : "entrée"} toutes les</dt><dd>${NF1.format(period).replace(",0", "")} s</dd>
-    ${simul ? `<dt>Réception</dt><dd>${nch} SDR en parallèle, sans commutation</dd>` : `<dt>Durée sur chaque entrée</dt><dd>${NF1.format(1000 / (2 * rate))} ms à ${rate} Hz</dd>`}
+    ${simul ? `<dt>Réception</dt><dd>${nch} SDR en parallèle, sans commutation</dd>` : block ? `<dt>Bascule</dt><dd>toutes les ${NF1.format(DIGITAL[dmode].perInput * DIGITAL[dmode].slot).replace(",0", "")} s, entre deux créneaux</dd>` : `<dt>Durée sur chaque entrée</dt><dd>${NF1.format(1000 / (2 * rate))} ms à ${rate} Hz</dd>`}
     <dt>Volume estimé</dt><dd>${bytes(volume)} (${bytes(setup.disk_free_bytes)} libres${setup.disk_free_bytes < need ? ` : <b style="color:var(--crit-ink)">espace insuffisant</b>` : ""})</dd>`;
   renderPublish(dur, win, n, nch);
   const aa = $("aa").checked;
@@ -245,6 +277,7 @@ function fillRange(b) {
   $("fmin").value = (lo / 1000).toFixed(1); $("fmax").value = (hi / 1000).toFixed(1);
 }
 $("mode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { mode = b.dataset.v; update(); } });
+$("dmode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { dmode = b.dataset.v; update(); } });
 $("reception").addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (!b || b.disabled) return;
@@ -278,10 +311,11 @@ $("form").addEventListener("submit", async (e) => {
   const aa = $("aa").checked;
   const r = autoRange();
   const body = {
-    title: $("title").value, mode,
+    title: $("title").value, mode: mode === "auto" ? "auto" : "fixed",
+    digital: mode === "digital" ? dmode : null, band: $("band").value,
     low_hz: mode === "auto" && r ? r.lo : null, high_hz: mode === "auto" && r ? r.hi : null,
     max_signals: Number($("nmax").value) || null,
-    frequencies: mode === "auto" ? [] : selected().map((f, i) => ({ freq_hz: f.hz, class: f.class, width_hz: Number(freqs.filter((x) => Number(x.khz) > 0)[i].width_hz) || null })),
+    frequencies: mode !== "fixed" ? [] : selected().map((f, i) => ({ freq_hz: f.hz, class: f.class, width_hz: Number(freqs.filter((x) => Number(x.khz) > 0)[i].width_hz) || null })),
     reception,
     channels: reception === "simultaneous"
       ? used().map((c) => ({ antenna_id: c.antenna, serial: c.serial }))

@@ -648,6 +648,7 @@ function renderAll() {
   const t = T();
   syncButtons(); fillSelects(); renderStatic(); renderQuality(); renderSummary();
   renderProfile(t); renderRank(t); renderBox(t); renderHeat(t); renderPairs(t); renderDeltaTS(t); renderLevels(t); renderSignals(t); renderActivity(t);
+  if (typeof renderDigital === "function") renderDigital(t);  // digital.js, modes numériques
 }
 
 /* ---------- Événements ---------- */
