@@ -311,6 +311,82 @@ class LoggingConfig(_Section):
     backup_count: int = Field(default=5, ge=1)
 
 
+DigitalModeName = Literal["ft8", "ft4", "wspr"]
+
+
+class DigitalSubband(_Section):
+    band: str
+    mode: DigitalModeName
+    dial_hz: float = Field(gt=0)  # USB dial frequency: audio 0 Hz
+
+
+def _default_subbands() -> list[DigitalSubband]:
+    # WSJT-X default frequency list (Models/FrequencyList.cpp), every IARU region. None on
+    # 60 m (national allocations), CB, 45 m and 85 m (cahier des charges, section 10).
+    return [DigitalSubband(band=b, mode=m, dial_hz=f) for b, m, f in (
+        ("80 m", "ft8", 3_573_000),
+        ("80 m", "ft4", 3_575_000),
+        ("80 m", "wspr", 3_568_600),
+        ("40 m", "ft8", 7_074_000),
+        ("40 m", "ft4", 7_047_500),
+        ("40 m", "wspr", 7_038_600),
+        ("30 m", "ft8", 10_136_000),
+        ("30 m", "ft4", 10_140_000),
+        ("30 m", "wspr", 10_138_700),
+        ("20 m", "ft8", 14_074_000),
+        ("20 m", "ft4", 14_080_000),
+        ("20 m", "wspr", 14_095_600),
+        ("17 m", "ft8", 18_100_000),
+        ("17 m", "ft4", 18_104_000),
+        ("17 m", "wspr", 18_104_600),
+        ("15 m", "ft8", 21_074_000),
+        ("15 m", "ft4", 21_140_000),
+        ("15 m", "wspr", 21_094_600),
+        ("12 m", "ft8", 24_915_000),
+        ("12 m", "ft4", 24_919_000),
+        ("12 m", "wspr", 24_924_600),
+        ("10 m", "ft8", 28_074_000),
+        ("10 m", "ft4", 28_180_000),
+        ("10 m", "wspr", 28_124_600)
+    )]
+
+
+def _per_mode(ft8: float, ft4: float, wspr: float) -> dict[str, float]:
+    return {"ft8": ft8, "ft4": ft4, "wspr": wspr}
+
+
+def _default_ground_km() -> dict[str, float]:
+    # Ground wave range by band, ambiguous with NVIS (cahier des charges, section 10).
+    return {"80 m": 80.0, "40 m": 60.0, "30 m": 50.0, "20 m": 40.0, "17 m": 35.0, "15 m": 35.0, "12 m": 30.0, "10 m": 30.0}
+
+
+class DigitalConfig(_Section):
+    """Decoding of FT8, FT4 and WSPR by the WSJT-X programs (decision D22)."""
+
+    # Directory of the WSJT-X programs (jt9, wsprd…); empty: the usual places.
+    wsjtx_path: str = ""
+    decode_depth: int = Field(default=3, ge=1, le=3)
+    subbands: list[DigitalSubband] = Field(default_factory=_default_subbands)
+    # Tracks: same station if the audio frequency stays within the tolerance…
+    freq_tolerance_hz: dict[str, float] = Field(default_factory=lambda: _per_mode(10.0, 20.0, 5.0))
+    # …closed after N slots without a decode, validated with at least K measured slots.
+    silence_slots: dict[str, int] = Field(
+        default_factory=lambda: {"ft8": 8, "ft4": 16, "wspr": 15})
+    min_measures: dict[str, int] = Field(default_factory=lambda: {"ft8": 3, "ft4": 3, "wspr": 2})
+    overlap_hz: float = Field(default=50.0, gt=0)  # two signals closer than this overlap
+    # Propagation classes by distance (km), and F2 layer height for the take-off angle.
+    ground_wave_km: dict[str, float] = Field(default_factory=_default_ground_km)
+    ground_wave_default_km: float = Field(default=50.0, ge=0)
+    nvis_km: float = Field(default=400.0, gt=0)
+    skip_km: float = Field(default=1000.0, gt=0)
+    one_hop_km: float = Field(default=3800.0, gt=0)
+    f2_height_km: float = Field(default=300.0, gt=0)
+    # Clock: warning beyond this offset (median DT of the decodes, or the NTP server).
+    clock_tolerance_s: float = Field(default=0.5, gt=0)
+    ntp_server: str = "pool.ntp.org"
+    ntp_interval_s: float = Field(default=3600.0, ge=0)  # 0: no NTP check
+
+
 class Config(_Section):
     station: StationConfig = Field(default_factory=StationConfig)
     hardware: HardwareConfig = Field(default_factory=HardwareConfig)
@@ -320,6 +396,7 @@ class Config(_Section):
     qualification: QualificationConfig = Field(default_factory=QualificationConfig)
     campaign: CampaignConfig = Field(default_factory=CampaignConfig)
     demo: DemoConfig = Field(default_factory=DemoConfig)
+    digital: DigitalConfig = Field(default_factory=DigitalConfig)
     wordpress: WordPressConfig = Field(default_factory=WordPressConfig)
     web: WebConfig = Field(default_factory=WebConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)

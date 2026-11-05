@@ -201,6 +201,164 @@ am_fm = 8000.0
 [demo]
 enabled = true                # campagnes de démonstration tant qu'aucune vraie campagne n'existe
 
+[digital]                     # FT8, FT4, WSPR décodés par les programmes de WSJT-X (D22)
+wsjtx_path = ""               # dossier des programmes de WSJT-X (jt9, wsprd…) ; vide : emplacements habituels
+decode_depth = 3              # profondeur de décodage de jt9 (1 à 3)
+overlap_hz = 50.0             # deux signaux à moins de N Hz se chevauchent
+ground_wave_default_km = 50.0 # onde de sol, bande absente de la liste ci-dessous
+nvis_km = 400.0               # classes de propagation : NVIS jusqu'à N km…
+skip_km = 1000.0              # …zone de silence jusqu'à N km…
+one_hop_km = 3800.0           # …DX en un bond jusqu'à N km, au-delà plusieurs bonds
+f2_height_km = 300.0          # hauteur de la couche F2 (angle de départ estimé)
+clock_tolerance_s = 0.5       # horloge : avertissement au-delà de N s de décalage
+ntp_server = "pool.ntp.org"
+ntp_interval_s = 3600.0       # contrôle de l'horloge toutes les N s (0 : jamais)
+
+[digital.freq_tolerance_hz]   # pistes : même station si la fréquence audio reste à N Hz près
+ft8 = 10.0
+ft4 = 20.0
+wspr = 5.0
+
+[digital.silence_slots]       # piste close après N créneaux sans décodage…
+ft8 = 8
+ft4 = 16
+wspr = 15
+
+[digital.min_measures]        # …et validée avec au moins N créneaux mesurés
+ft8 = 3
+ft4 = 3
+wspr = 2
+
+[digital.ground_wave_km]      # portée de l'onde de sol par bande (ambiguë avec le NVIS)
+"80 m" = 80.0
+"40 m" = 60.0
+"30 m" = 50.0
+"20 m" = 40.0
+"17 m" = 35.0
+"15 m" = 35.0
+"12 m" = 30.0
+"10 m" = 30.0
+
+[[digital.subbands]]
+band = "80 m"
+mode = "ft8"
+dial_hz = 3573000.0
+
+[[digital.subbands]]
+band = "80 m"
+mode = "ft4"
+dial_hz = 3575000.0
+
+[[digital.subbands]]
+band = "80 m"
+mode = "wspr"
+dial_hz = 3568600.0
+
+[[digital.subbands]]
+band = "40 m"
+mode = "ft8"
+dial_hz = 7074000.0
+
+[[digital.subbands]]
+band = "40 m"
+mode = "ft4"
+dial_hz = 7047500.0
+
+[[digital.subbands]]
+band = "40 m"
+mode = "wspr"
+dial_hz = 7038600.0
+
+[[digital.subbands]]
+band = "30 m"
+mode = "ft8"
+dial_hz = 10136000.0
+
+[[digital.subbands]]
+band = "30 m"
+mode = "ft4"
+dial_hz = 10140000.0
+
+[[digital.subbands]]
+band = "30 m"
+mode = "wspr"
+dial_hz = 10138700.0
+
+[[digital.subbands]]
+band = "20 m"
+mode = "ft8"
+dial_hz = 14074000.0
+
+[[digital.subbands]]
+band = "20 m"
+mode = "ft4"
+dial_hz = 14080000.0
+
+[[digital.subbands]]
+band = "20 m"
+mode = "wspr"
+dial_hz = 14095600.0
+
+[[digital.subbands]]
+band = "17 m"
+mode = "ft8"
+dial_hz = 18100000.0
+
+[[digital.subbands]]
+band = "17 m"
+mode = "ft4"
+dial_hz = 18104000.0
+
+[[digital.subbands]]
+band = "17 m"
+mode = "wspr"
+dial_hz = 18104600.0
+
+[[digital.subbands]]
+band = "15 m"
+mode = "ft8"
+dial_hz = 21074000.0
+
+[[digital.subbands]]
+band = "15 m"
+mode = "ft4"
+dial_hz = 21140000.0
+
+[[digital.subbands]]
+band = "15 m"
+mode = "wspr"
+dial_hz = 21094600.0
+
+[[digital.subbands]]
+band = "12 m"
+mode = "ft8"
+dial_hz = 24915000.0
+
+[[digital.subbands]]
+band = "12 m"
+mode = "ft4"
+dial_hz = 24919000.0
+
+[[digital.subbands]]
+band = "12 m"
+mode = "wspr"
+dial_hz = 24924600.0
+
+[[digital.subbands]]
+band = "10 m"
+mode = "ft8"
+dial_hz = 28074000.0
+
+[[digital.subbands]]
+band = "10 m"
+mode = "ft4"
+dial_hz = 28180000.0
+
+[[digital.subbands]]
+band = "10 m"
+mode = "wspr"
+dial_hz = 28124600.0
+
 [wordpress]
 enabled = false               # publication des campagnes sur le site (plugin open-antenna-validation)
 url = ""                      # adresse du site, par exemple https://www.exemple.fr
