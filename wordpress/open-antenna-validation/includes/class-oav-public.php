@@ -26,7 +26,10 @@ class OAV_Public
         wp_register_style('oav', OAV_URL . 'assets/oav.css', ['oav-design'], $v);
         wp_register_script('oav-echarts', OAV_URL . 'assets/vendor/echarts.min.js', [], '5.5.1', true);
         wp_register_script('oav-stats', OAV_URL . 'assets/shared/stats.js', [], $v, true);
-        wp_register_script('oav-results', OAV_URL . 'assets/shared/results.js', ['oav-echarts', 'oav-stats'], $v, true);
+        // Decoded stations (P10): land outlines for the map, then the digital section.
+        wp_register_script('oav-world', OAV_URL . 'assets/vendor/world-land.js', [], $v, true);
+        wp_register_script('oav-digital', OAV_URL . 'assets/shared/digital.js', ['oav-world'], $v, true);
+        wp_register_script('oav-results', OAV_URL . 'assets/shared/results.js', ['oav-echarts', 'oav-stats', 'oav-digital'], $v, true);
         wp_register_script('oav-list', OAV_URL . 'assets/oav-list.js', [], $v, true);
         wp_register_script('oav-stations', OAV_URL . 'assets/oav-stations.js', [], $v, true);
     }

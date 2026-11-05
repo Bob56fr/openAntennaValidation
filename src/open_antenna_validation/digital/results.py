@@ -67,8 +67,32 @@ def _bin(value: float | None, edges: tuple[int, ...]) -> str | None:
     return None
 
 
+def _relocate(st: dict[str, Any], home: tuple[float, float], classes: dict[str, float]) -> None:
+    """Distance, azimuth, class and take-off angle seen from ``home``: the published centre
+    of the station's square. A station placed by its country keeps a rounded position, so
+    that the distances cannot locate the station more precisely than its square."""
+    if st["locator"]:
+        d, az = messages.distance_azimuth(*home, *messages.grid_to_latlon(st["locator"]))
+        st["distance_km"], st["azimuth_deg"] = round(d), round(az)
+    elif st["distance_km"] is not None:
+        st["distance_km"] = round(st["distance_km"] / 100) * 100
+        st["azimuth_deg"] = round(st["azimuth_deg"] / 5) * 5 % 360
+    if st["distance_km"] is None:
+        return
+    d = st["distance_km"]
+    st["class"] = messages.propagation_class(d, classes["ground_km"], classes["nvis_km"],
+                                             classes["skip_km"], classes["one_hop_km"])
+    angle = None
+    if d <= classes["one_hop_km"]:
+        angle = messages.takeoff_angle(d, classes["f2_height_km"])
+    st["takeoff_deg"] = None if angle is None else round(angle, 1)
+
+
 def digital_results(db: Database, cid: int, n_ch: int, reference: int, simultaneous: bool,
-                    station_locator: str) -> dict[str, Any]:
+                    station_locator: str, *, published_locator: str | None = None,
+                    classes: dict[str, float] | None = None) -> dict[str, Any]:
+    """``published_locator``: the shortened locator of the publication; the positions are
+    then given from its centre (see _relocate)."""
     tracks = db.query("SELECT * FROM tracks WHERE campaign_id = ? ORDER BY first_ms", (cid,))
     counts: dict[str, int] = {}
     reasons: dict[str, int] = {}
@@ -96,7 +120,6 @@ def digital_results(db: Database, cid: int, n_ch: int, reference: int, simultane
     groups: dict[str, dict[str, dict[int, list[float]]]] = {
         "class": {}, "distance": {}, "azimuth": {}, "angle": {}}
     overall: dict[int, list[float]] = {c: [] for c in others}
-    home = messages.grid_to_latlon(station_locator) if station_locator else None
     for t in tracks:
         if t["state"] != "validated":
             continue
@@ -115,6 +138,14 @@ def digital_results(db: Database, cid: int, n_ch: int, reference: int, simultane
                       azimuth_deg=t["azimuth_deg"], approximate=False)
         for c in others:
             st["gaps"][c].extend(gap_of(points, c, reference))
+    if published_locator is not None and classes:
+        station_locator = published_locator
+        centre = messages.grid_to_latlon(published_locator) if published_locator else None
+        for st in stations.values():
+            if centre is None:
+                st.update(distance_km=None, azimuth_deg=None, takeoff_deg=None)
+            else:
+                _relocate(st, centre, classes)
     for st in stations.values():
         keys = {"class": st["class"] or None,
                 "distance": _bin(st["distance_km"], DISTANCE_BINS_KM),
@@ -129,13 +160,14 @@ def digital_results(db: Database, cid: int, n_ch: int, reference: int, simultane
                     groups[name].setdefault(key, {}).setdefault(c, []).extend(gaps)
         st["gap"] = {c: _summary(st["gaps"][c]) for c in others}
         del st["gaps"]
-        if home is not None and st["locator"]:
+        if st["locator"]:
             st["lat"], st["lon"] = messages.grid_to_latlon(st["locator"])
     # Stations decoded by each combination of antennas (Venn up to 3, UpSet beyond).
     sets: dict[str, int] = {}
     for chans in decoded_by.values():
         key = ",".join(str(c) for c in sorted(chans))
         sets[key] = sets.get(key, 0) + 1
+    home = messages.grid_to_latlon(station_locator) if station_locator else None
     exclusive = {c: sum(1 for ch in decoded_by.values() if ch == {c}) for c in range(n_ch)}
     pairs = {f"{a},{b}": sum(1 for ch in decoded_by.values() if {a, b} <= ch)
              for a, b in combinations(range(n_ch), 2)}

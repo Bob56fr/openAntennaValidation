@@ -135,3 +135,50 @@ def test_csv_export_of_decodes_and_tracks(station: Station) -> None:
     tracks = "".join(export_csv(db, "e1", "tracks")).splitlines()
     assert tracks[1].startswith(f"{tid},K1SIM,,validated")
     assert filename(db, "e1", "tracks").endswith("-pistes.csv")
+
+
+def test_published_digital_summary_hides_the_precise_locator(station: Station) -> None:
+    import json
+
+    import jsonschema
+
+    from open_antenna_validation.campaigns import campaign_meta
+
+    db = station.db
+    params = {"locator": "JN18EU", "digital": {
+        "mode": "ft8", "dial_hz": 14_074_000.0, "band": "20 m", "block_ms": 60_000, "seed": 1,
+        "classes": {"ground_km": 40, "nvis_km": 400, "skip_km": 1000, "one_hop_km": 3800,
+                    "f2_height_km": 300}}}
+    with db.transaction() as conn:
+        cid = int(conn.execute(
+            "INSERT INTO campaigns (uuid, reception_mode, measure_mode, low_hz, high_hz, state,"
+            " created_ms, start_ms, n_channels, band, params_json) VALUES ('p1', 'simultaneous',"
+            " 'fixed', 14e6, 14.1e6, 'done', 0, 0, 2, '20 m', ?)",
+            (json.dumps(params),)).lastrowid or 0)
+        for idx in (0, 1):
+            conn.execute("INSERT INTO campaign_channels (campaign_id, idx, color_slot) VALUES"
+                         " (?, ?, ?)", (cid, idx, idx + 1))
+        for call, loc, dist, az in (("DL1SIM", "JO62", 834.4, 54.2), ("ZZ1SIM", "", 1234.5, 77.7)):
+            tid = int(conn.execute(
+                "INSERT INTO tracks (campaign_id, callsign, locator, distance_km, azimuth_deg,"
+                " propagation_class, state, first_ms, last_ms, approximate) VALUES"
+                " (?, ?, ?, ?, ?, 'skip', 'validated', 0, 0, ?)",
+                (cid, call, loc, dist, az, int(not loc))).lastrowid or 0)
+            for ch, level in ((0, -90.0), (1, -92.0)):
+                conn.execute(
+                    "INSERT INTO decodes (campaign_id, track_id, channel_idx, slot_ms,"
+                    " digital_mode, callsign, message, level_dbfs, decoded) VALUES"
+                    " (?, ?, ?, 0, 'FT8', ?, 'x', ?, 1)", (cid, tid, ch, call, level))
+    local = campaign_meta(db, "p1")["digital"]
+    assert local["home"]["locator"] == "JN18EU"
+    assert local["stations"][0]["distance_km"] == 834.4  # as measured from the full locator
+    published = campaign_meta(db, "p1", locator_chars=4)
+    d = published["digital"]
+    assert d["home"]["locator"] == "JN18"
+    by_call = {s["call"]: s for s in d["stations"]}
+    assert by_call["DL1SIM"]["distance_km"] != 834.4  # from the centre of JN18
+    assert by_call["ZZ1SIM"]["distance_km"] == 1200 and by_call["ZZ1SIM"]["azimuth_deg"] == 80
+    schema = json.loads((Path(__file__).resolve().parents[1] / "docs" / "wordpress"
+                         / "ingest.schema.json").read_text(encoding="utf-8"))
+    meta_schema = {**schema["$defs"]["meta"], "$defs": schema["$defs"]}
+    jsonschema.validate(json.loads(json.dumps(d)), meta_schema["properties"]["digital"])

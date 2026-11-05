@@ -96,16 +96,8 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
             floor[a["channel_idx"]][i] = a["floor_med"]
         signals.append({**sig, "rssi": rssi, "floor": floor})
     quality = meta.pop("quality")
-    params = _params(db.query("SELECT params_json FROM campaigns WHERE id = ?", (cid,))[0])
-    digital = None
-    if params.get("digital"):
-        c = meta["campaign"]
-        digital = {**digital_results(db, cid, n_ch, int(c["reference_channel"]),
-                                     c["reception_mode"] == "simultaneous",
-                                     str(params.get("locator") or "")),
-                   "mode": params["digital"]["mode"], "dial_hz": params["digital"]["dial_hz"]}
     return {**meta, "windows": {"start_ms": first, "step_ms": step, "count": count},
-            "signals": signals, "quality": quality, "digital": digital}
+            "signals": signals, "quality": quality}
 
 
 def campaign_meta(db: Database, uuid: str, *, locator_chars: int = 6) -> dict[str, Any]:
@@ -182,7 +174,23 @@ def campaign_meta(db: Database, uuid: str, *, locator_chars: int = 6) -> dict[st
         "signals": signals,
         "activity": activity,
         "quality": _quality(db, cid, n_ch, activity, params, windows, len(signals)),
+        "digital": _digital(db, cid, c, params, locator_chars),
     }
+
+
+def _digital(db: Database, cid: int, c: Any, params: dict[str, Any],
+             locator_chars: int) -> dict[str, Any] | None:
+    """Results of the decoded stations (P10). Shortened locator (publication): positions
+    from the centre of the published square."""
+    digital = params.get("digital")
+    if not digital:
+        return None
+    locator = str(params.get("locator") or "")
+    published = locator[:locator_chars] if locator_chars < len(locator) else None
+    return {**digital_results(db, cid, int(c["n_channels"]), int(c["reference_channel"]),
+                              c["reception_mode"] == "simultaneous", locator,
+                              published_locator=published, classes=digital.get("classes")),
+            "mode": digital["mode"], "dial_hz": digital["dial_hz"]}
 
 
 # Quality bits of the measurements (engine.py), in the order of the table of the page.

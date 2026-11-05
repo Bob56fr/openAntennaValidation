@@ -123,7 +123,26 @@
           }
         },
         "activity": {"type": "array"},
-        "quality": {"type": "object"}
+        "quality": {"type": "object"},
+        "digital": {
+          "description": "Stations décodées (P10) : écart par station sur les pistes validées ; positions données depuis le centre du carré publié.",
+          "type": ["object", "null"],
+          "required": ["mode", "dial_hz", "method", "reference", "overall", "stations", "counts"],
+          "properties": {
+            "mode": {"enum": ["ft8", "ft4", "wspr"]},
+            "dial_hz": {"type": "number"},
+            "method": {"enum": ["pivot", "paired"]},
+            "reference": {"type": "integer", "minimum": 0, "maximum": 9},
+            "overall": {"type": "object"},
+            "groups": {"type": "object"},
+            "counts": {"type": "object"},
+            "stations": {"type": "array", "maxItems": 5000, "items": {
+              "type": "object", "required": ["call", "gap", "decoded_by"],
+              "properties": {"call": {"type": "string", "maxLength": 16}, "locator": {"type": "string", "maxLength": 6},
+                             "decoded_by": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 9}}}}},
+            "home": {"type": ["object", "null"]}
+          }
+        }
       }
     }
   }

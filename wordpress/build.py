@@ -127,7 +127,7 @@ def build() -> Path:
         if d.exists():
             shutil.rmtree(d)
         d.mkdir(parents=True)
-    for name in ("results.js", "stats.js"):
+    for name in ("results.js", "stats.js", "digital.js"):
         shutil.copy2(WEB / name, shared / name)
     styles = (WEB / "style.css").read_text(encoding="utf-8") + "\n" \
         + (WEB / "results.css").read_text(encoding="utf-8")
@@ -136,6 +136,7 @@ def build() -> Path:
         "/* Généré par wordpress/build.py depuis web/style.css et web/results.css. */\n"
         + scope_css(styles), encoding="utf-8")
     shutil.copy2(WEB / "vendor" / "echarts.min.js", vendor / "echarts.min.js")
+    shutil.copy2(WEB / "vendor" / "world-land.js", vendor / "world-land.js")
     shutil.copytree(WEB / "vendor" / "fonts", vendor / "fonts")
     templates = PLUGIN / "templates"
     templates.mkdir(exist_ok=True)

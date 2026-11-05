@@ -245,9 +245,15 @@ def digital_params(cfg: Config, request: dict[str, Any], inputs: list[str],
     n_inputs = 1 if simultaneous else len(inputs)
     # Switching block: every antenna in turn, two slots each (FT8, FT4) or one (WSPR).
     per_input = 1 if name == "wspr" else 2
+    d = cfg.digital
     return {"mode": name, "dial_hz": sub.dial_hz, "band": band,
             "block_ms": n_inputs * per_input * mode.slot_ms,
-            "seed": int(request.get("seed") or 0) or secrets.randbelow(1 << 30)}
+            "seed": int(request.get("seed") or 0) or secrets.randbelow(1 << 30),
+            # Thresholds of the propagation classes, kept with the campaign: the classes of
+            # its results can be recomputed (from another locator, on the site).
+            "classes": {"ground_km": d.ground_wave_km.get(band, d.ground_wave_default_km),
+                        "nvis_km": d.nvis_km, "skip_km": d.skip_km,
+                        "one_hop_km": d.one_hop_km, "f2_height_km": d.f2_height_km}}
 
 
 DIGITAL_GUARD_HZ = 3_500.0  # audio band of the USB demodulator around dial + 1500 Hz

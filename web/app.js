@@ -142,14 +142,24 @@ function renderCampaign(c) {
   const state = c.state === "interrupted" ? ["Interrompue", "bad"] : c.surveying ? ["Relevé de la bande", "warn"]
     : c.calm ? ["Bande calme", ""] : ["Bande active", "ok"];
   const simul = c.reception === "simultaneous";
-  $("camp-eyebrow").textContent = `Campagne en cours${c.aa ? " · A/A" : ""} · ${simul ? "réception simultanée" : "mode commuté"} · ${c.auto ? "bande automatique" : "fréquences imposées"}`;
+  const dig = c.digital;
+  $("camp-eyebrow").textContent = `Campagne en cours${c.aa ? " · A/A" : ""} · ${simul ? "réception simultanée" : "mode commuté"} · ${dig ? `${dig.mode} décodé` : c.auto ? "bande automatique" : "fréquences imposées"}`;
   $("camp-title").textContent = c.title;
   $("camp-pill").className = `pill ${state[1]}`; $("camp-word").textContent = state[0];
   $("camp-results").href = `/campaign?id=${encodeURIComponent(c.uuid)}`;
   $("camp-progress").style.width = `${Math.round(done * 100)}%`;
   $("camp-meta").innerHTML = `<span>${c.signals} ${c.auto ? "signal" : "fréquence"}${c.signals > 1 ? "s" : ""} suivi${c.auto && c.signals > 1 ? "s" : ""} · ${simul ? `${c.devices.length} SDR${c.alignment_ms ? `, écart entre SDR ${NF1.format(c.alignment_ms.p50)} ms (99 % < ${NF1.format(c.alignment_ms.p99)} ms)` : ""}` : `commutation ${c.rate_hz} Hz`}</span>
     <span>${Math.round(done * 100)} % · ${duration(now - c.start_ms)} écoulées, reste ${duration(c.planned_end_ms - now)}</span>
-    <span>Fin prévue ${fmtWhen.format(c.planned_end_ms)}</span>`;
+    <span>Fin prévue ${fmtWhen.format(c.planned_end_ms)}</span>${dig ? digitalLine(dig) : ""}`;
+}
+// Décodages en direct d'une campagne numérique : créneaux traités, pistes, dernières stations.
+function digitalLine(d) {
+  const n = (st) => (d.tracks || []).filter((t) => t.state === st).reduce((a, t) => a + t.n, 0);
+  const calls = [...new Set((d.live || []).map((m) => m.call).filter(Boolean))].slice(0, 8);
+  const esc = (x) => String(x).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+  return `<span>${d.slots} créneau${d.slots > 1 ? "x" : ""} décodé${d.slots > 1 ? "s" : ""} · pistes : ${n("validated")} validée${n("validated") > 1 ? "s" : ""}, ${n("tracking") + n("candidate")} en cours, ${n("rejected")} rejetée${n("rejected") > 1 ? "s" : ""}</span>`
+    + (calls.length ? `<span>Dernières stations : <span class="mono">${calls.map(esc).join(" ")}</span></span>` : "")
+    + (d.errors ? `<span style="color:var(--crit-ink)">${d.errors} créneau${d.errors > 1 ? "x" : ""} en erreur de décodage (voir le journal)</span>` : "");
 }
 $("camp-stop").addEventListener("click", () => { $("camp-confirm").hidden = false; });
 $("camp-stop-no").addEventListener("click", () => { $("camp-confirm").hidden = true; });
