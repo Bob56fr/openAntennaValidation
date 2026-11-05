@@ -66,4 +66,4 @@ Pièges Windows : PowerShell 5.1 écrit en UTF-8 avec BOM (`Set-Content`, `Out-F
 | P7 WordPress | Livré (D18) : vérifié sur le WordPress de test (Debian, port 8082) ; à essayer sur OVH |
 | P8 RTL-SDR V4 et Airspy HF+ | Livré (D19), en attente de test sur les récepteurs |
 | P9 Installeurs | Livré (D21) : Linux de référence (essayé en conteneurs Debian 12/13) ; Windows simplifié sans service (`install/windows`), en attente de test |
-| P10 Modes numériques | À faire |
+| P10 Modes numériques | Livré avec le simulateur (D22, décodeurs de WSJT-X), en attente d'essai sur l'air |

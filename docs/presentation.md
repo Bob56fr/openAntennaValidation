@@ -29,6 +29,14 @@ Bandes prévues : toutes les bandes radioamateur de 3 à 30 MHz, la CB (26 à 28
 
 On peut donner soi-même les fréquences à mesurer (une balise, une station de radiodiffusion, une fréquence FT8), ou une portion de bande : le logiciel relève alors la bande, **choisit lui-même les signaux** (porteuses, signaux numériques, SSB, AM), garde un point de bruit, et réévalue la bande toutes les heures. Quand la bande est calme (la nuit sur 28 MHz), il ralentit les mesures sans s'arrêter.
 
+## Les modes numériques : savoir qui l'on reçoit
+
+Sur les sous-bandes FT8, FT4 et WSPR, la station **décode les messages** avec les programmes de WSJT-X. Elle sait alors qui émet, d'où, à quelle distance et dans quelle direction. Chaque station reçue est suivie tout au long de ses échanges, puis validée ou écartée (collision, saut de fréquence, trop peu de mesures…).
+
+Le message décodé est réencodé : on connaît le ton émis à chaque instant, et le niveau est mesuré sur ce seul ton, le bruit sur les tons voisins. La mesure reste précise même au seuil de décodage. Avec plusieurs SDR, une station décodée sur une seule antenne est mesurée aussi sur les autres : on voit ce que la meilleure antenne entend et que l'autre manque.
+
+On obtient l'écart entre antennes **station par station**, puis selon la distance (onde de sol, NVIS, un bond, plusieurs bonds), l'angle de départ estimé et la direction : une carte centrée sur la station, et un diagramme polaire qui montre le lobe d'une antenne directive.
+
 ## Une méthode qui chiffre son incertitude
 
 - **Qualification du matériel** : banc de mesure du récepteur en mode commuté, campagne A/A dans les deux modes. Chaque campagne porte ses **marges d'erreur par classe de signal**.
@@ -73,7 +81,7 @@ La liste des campagnes se filtre par opérateur, bande, paire de types d'antenne
 | Site WordPress multi-opérateurs | Fait |
 | RTL-SDR V4 et Airspy HF+ | Faits, en attente d'essai sur les récepteurs |
 | Installeurs Windows et Linux | Faits : Linux essayé sur Debian 12 et 13 ; Windows en attente d'essai |
-| Modes numériques (FT8, FT4, WSPR) : suivi des stations, distance, propagation | À faire, en option |
+| Modes numériques (FT8, FT4, WSPR) : suivi des stations, distance, propagation | Faits avec le simulateur, en attente d'essai sur l'air |
 
 Tout ce qui est marqué « avec le simulateur » fonctionne de bout en bout avec un récepteur simulé ; les essais sur récepteurs réels sont en cours.
 

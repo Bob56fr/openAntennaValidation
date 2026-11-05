@@ -24,6 +24,7 @@ Compare la réception de deux à dix antennes HF en mesurant, sur les mêmes sig
 - Pour un SDRplay : API SDRplay 3.x, à télécharger sur le [site de SDRplay](https://www.sdrplay.com/downloads/). Elle est propriétaire et ne peut pas être fournie avec ce logiciel. Son service (`SDRplayAPIService` sous Windows) doit tourner.
 - Pour une RTL-SDR Blog V4 : librtlsdr de la [branche RTL-SDR Blog](https://github.com/rtlsdrblog/rtl-sdr-blog/releases), et le pilote WinUSB (Zadig) sous Windows. Chaque clé doit avoir un numéro de série unique (`rtl_eeprom -s`).
 - Pour un Airspy HF+ : libairspyhf (sous Windows, `airspyhf.dll` du paquet SDR# d'Airspy).
+- Pour les modes numériques (FT8, FT4, WSPR) : [WSJT-X](https://wsjt.sourceforge.io/wsjtx.html), dont la station utilise les décodeurs (Debian : paquet `wsjtx`, installé par l'installeur ; Windows : à installer soi-même). Le locator de la station doit être renseigné.
 - Les installeurs fournissent ces deux bibliothèques. En installation manuelle, indiquez le chemin de la bibliothèque dans `library_path` de la section du pilote (`[hardware.rtlsdr]`, `[hardware.airspyhf]`).
 
 ## Installation
@@ -57,7 +58,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\oav serve         # page web sur http://localhost:8660/
 ```
 
-Sans matériel, `oav init --driver simulated` utilise un SDR simulé à deux entrées (porteuses, SSB, FT8, évanouissement, bascule réaliste).
+Sans matériel, `oav init --driver simulated` utilise un SDR simulé à deux entrées (porteuses, SSB, stations FT8, FT4 et WSPR décodables, évanouissement, bascule réaliste).
 
 Le répertoire de la station (configuration, base, journaux) est `%PROGRAMDATA%\open-antenna-validation` sous Windows, `~/.local/share/open-antenna-validation` sous Linux (`/var/lib/open-antenna-validation` pour le service installé). On peut le changer avec `--home` ou la variable `OAV_HOME`.
 
@@ -88,6 +89,14 @@ others = [
 Avec des RTL-SDR ou des Airspy HF+, mettez `driver = "rtlsdr"` ou `driver = "airspyhf"` ; un SDR de la liste peut aussi avoir son propre pilote (`{ serial = "3B52AB5DAC5A7E91", driver = "airspyhf" }`). Chaque SDR prend sa plus basse fréquence d'échantillonnage possible au-dessus de `sample_rate` (250 kS/s par défaut) ; pour couvrir toute la bande des 10 m avec des RTL-SDR, mettez `sample_rate = 2400000`.
 
 Chaque SDR a son propre processus d'acquisition. Avant la première campagne, faites une campagne A/A (la même antenne sur tous les SDR par un splitter) : elle mesure l'écart de gain de chaque SDR et les marges. Les SDR doivent rester branchés sur les mêmes ports et dans le même ordre de voies pour que l'étalonnage s'applique.
+
+## Modes numériques (FT8, FT4, WSPR)
+
+À la création d'une campagne, « Modes numériques » choisit le mode et prend la sous-bande de la bande choisie (fréquences par défaut de WSJT-X ; aucune sur 60 m). Chaque créneau est décodé par WSJT-X sur chaque antenne ; chaque message est réencodé et mesuré sur toutes les antennes, ton par ton. En mode commuté, l'antenne change entre deux créneaux, jamais pendant (FT8 et FT4 : tous les deux créneaux ; WSPR : ordre pseudo-aléatoire équilibré). Les résultats ajoutent une section « Stations décodées » : carte, écart selon la distance, l'angle de départ et la direction, stations décodées par chaque antenne, tableau ; et deux exports CSV (décodages, pistes). Réglages dans `[digital]` de `config.toml` (`wsjtx_path` si WSJT-X n'est pas à son emplacement habituel, tolérances des pistes, classes de propagation).
+
+La station vérifie aussi l'heure de l'ordinateur auprès de `pool.ntp.org` (réglable, `ntp_interval_s = 0` pour ne jamais interroger le réseau) : les créneaux demandent une horloge juste à une demi-seconde près.
+
+Le SDR simulé émet des stations FT8, FT4 et WSPR décodables (indicatifs fictifs en `SIM`) sur 20 m : essayez une campagne « Modes numériques » sur 20 m avec `oav init --driver simulated`.
 
 ## Publication sur un site WordPress
 

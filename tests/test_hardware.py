@@ -83,8 +83,12 @@ def test_simulated_ft8_only_in_even_slots() -> None:
     driver = sim(signals=[ft8], noise_dbfs=-120.0)
     driver.set_gain_step(0)
     rate = 62_500
-    driver.set_sample_rate(rate)  # restarts the stream at t = 0
-    on = driver.read_iq(rate * 5)  # 0-5 s: slot 0 transmits
+    driver.set_sample_rate(rate)  # restarts the stream on a whole UTC second
+    # Skip to the start of the next even slot of the air clock.
+    epoch = driver.air_epoch() or 0.0
+    start = (int(epoch) // 30 + 1) * 30
+    driver.read_iq(int((start - epoch) * rate))
+    on = driver.read_iq(rate * 5)  # 0-5 s: the even slot transmits
     driver.read_iq(rate * 10)
     off = driver.read_iq(rate * 5)  # 15-20 s: slot 1 is silent
     assert float(db(np.mean(np.abs(on) ** 2))) > float(db(np.mean(np.abs(off) ** 2))) + 30
