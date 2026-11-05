@@ -16,10 +16,10 @@ from tests.conftest import PASSWORD
 
 
 def test_demo_campaigns_created_once(db: Database) -> None:
-    assert ensure_demo_campaigns(db) == 2
+    assert ensure_demo_campaigns(db) == 3
     assert ensure_demo_campaigns(db) == 0
     items = list_campaigns(db)
-    assert {c["uuid"] for c in items} == {"demo-40m-2", "demo-40m-6"}
+    assert {c["uuid"] for c in items} == {"demo-40m-2", "demo-40m-6", "demo-40m-ft8"}
     assert all(c["demo"] for c in items)
     six = next(c for c in items if c["uuid"] == "demo-40m-6")
     assert six["n_channels"] == 6 and "Mini-whip" in six["antenna_types"]
@@ -74,7 +74,12 @@ def client(station: Station, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestCl
 
 def test_campaign_api_and_pages(client: TestClient) -> None:
     items = client.get("/api/campaigns").json()
-    assert len(items) == 2
+    assert len(items) == 3
+    ft8 = client.get("/api/campaigns/demo-40m-ft8/results").json()["digital"]
+    assert ft8["mode"] == "ft8" and len(ft8["stations"]) > 30
+    # The vertical (B) loses at high angles, wins on long distances.
+    assert ft8["groups"]["class"]["nvis"]["1"]["median"] < -5
+    assert ft8["groups"]["class"]["dxn"]["1"]["median"] > 2
     r = client.get("/api/campaigns/demo-40m-6/results", headers={"Accept-Encoding": "gzip"})
     assert r.status_code == 200 and len(r.json()["channels"]) == 6
     assert client.get("/api/campaigns/absente/results").status_code == 404

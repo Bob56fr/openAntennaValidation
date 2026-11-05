@@ -98,6 +98,14 @@ DEMOS = {
                    "qualification": {"date": "1er nov. 2026", "duration": "8 h",
                                      "bias": "de −0,6 à +0,4 dB selon la voie (corrigé)",
                                      "alignment_ms": 3.1, "load_cpu_pct": 71}},
+    # Same antennas as demo-40m-2, with FT8 decoded on 7.074 MHz (P10).
+    "demo-40m-ft8": {"title": "Dipôle contre verticale, stations FT8 décodées (démonstration)",
+                     "antennas": 2, "sdr": "2 × SDRplay RSP2 Pro", "seed": 20261105,
+                     "digital": True,
+                     "margins": {"carrier": 0.2, "digital": 0.3, "ssb": 0.9, "all": 0.4},
+                     "qualification": {"date": "1er nov. 2026", "duration": "6 h",
+                                       "bias": "+0,15 dB (corrigé)", "alignment_ms": 1.8,
+                                       "load_cpu_pct": 41}},
 }
 
 
@@ -192,6 +200,8 @@ def _create(db: Database, uuid: str, spec: dict[str, Any]) -> None:
             "spacing_note": "Antennes distantes de 18 m (environ 0,4 λ à 7,1 MHz)." if n_ch == 2
             else "Six antennes sur un même terrain (distances saisies : de 9 à 25 m).",
         }
+        if spec.get("digital"):
+            params["digital"] = DEMO_DIGITAL
         cur = conn.execute(
             "INSERT INTO campaigns (uuid, title, callsign, reception_mode, measure_mode, low_hz,"
             " high_hz, band, state, created_ms, start_ms, planned_end_ms, end_ms, n_channels,"
@@ -284,3 +294,99 @@ def _create(db: Database, uuid: str, spec: dict[str, Any]) -> None:
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
+        if spec.get("digital"):
+            _digital_demo(conn, cid, rng, end_ms)
+
+
+# --- decoded FT8 stations (P10) -------------------------------------------------------------
+
+DEMO_DIGITAL: dict[str, Any] = {
+    "mode": "ft8", "dial_hz": 7_074_000.0, "band": BAND, "block_ms": 30_000, "seed": 1,
+    "classes": {"ground_km": 60.0, "nvis_km": 400.0, "skip_km": 1000.0, "one_hop_km": 3800.0,
+                "f2_height_km": 300.0}}
+# Fictitious stations (callsigns ending in DEMO are not real ones): locator, or "" when only
+# the country is known.
+DEMO_STATIONS = [
+    ("F1DEMO", "JN19"), ("F2DEMO", "JN08"), ("F3DEMO", "IN97"), ("F4DEMO", "JN24"),
+    ("F5DEMO", "JN03"), ("F6DEMO", "IN78"), ("ON4DEMO", "JO20"), ("PA3DEMO", "JO22"),
+    ("G4DEMO", "IO91"), ("G3DEMO", "IO83"), ("GI4DEMO", "IO74"), ("EI2DEMO", "IO63"),
+    ("DL1DEMO", "JO62"), ("DL2DEMO", "JN48"), ("DK3DEMO", "JO31"), ("OE1DEMO", "JN88"),
+    ("HB9DEMO", "JN47"), ("I2DEMO", "JN45"), ("IK8DEMO", "JN70"), ("EA4DEMO", "IN80"),
+    ("EA8DEMO", "IL18"), ("CT1DEMO", "IM58"), ("SP5DEMO", "KO02"), ("OK2DEMO", "JN89"),
+    ("YO3DEMO", "KN34"), ("LZ1DEMO", "KN22"), ("SV1DEMO", "KM18"), ("UR5DEMO", "KO50"),
+    ("OH2DEMO", "KP20"), ("LA9DEMO", "JP99"), ("SM5DEMO", "JO89"), ("TF3DEMO", "HP94"),
+    ("4X1DEMO", "KM72"), ("CN8DEMO", "IM63"), ("K1DEMO", "FN42"), ("W4DEMO", "EM73"),
+    ("VE3DEMO", "FN03"), ("PY2DEMO", "GG66"), ("LU1DEMO", "GF05"), ("ZS6DEMO", "KG33"),
+    ("JA1DEMO", "PM95"), ("VK2DEMO", "QF56"), ("UA9DEMO", ""), ("5Z4DEMO", ""),
+]
+# Dipole A: wire along 110° / 290°, most gain broadside (20° / 200°) at high angles.
+DIPOLE_AXIS_DEG = 110.0
+
+
+def _demo_gap(distance: float, azimuth: float, rng: np.random.Generator) -> float:
+    """B (vertical) − A (dipole): the vertical wins at low angles (DX), loses at high
+    angles (NVIS); the dipole loses off its broadside directions."""
+    dx = _smooth(500.0, 3000.0, distance)
+    vertical = -8.0 + 11.0 * dx
+    broadside = abs(math.sin(math.radians(azimuth - DIPOLE_AXIS_DEG)))
+    return float(vertical + 3.5 * (1 - broadside) * dx + rng.normal(0, 0.4))
+
+
+def _digital_demo(conn: Any, cid: int, rng: np.random.Generator, end_ms: int) -> None:
+    from open_antenna_validation.digital import messages
+
+    home = messages.grid_to_latlon(DEMO_LOCATOR)
+    slot = 15_000
+    span = (end_ms - START_MS) // slot
+    cls = DEMO_DIGITAL["classes"]
+    for n, (call, grid) in enumerate(DEMO_STATIONS):
+        if grid:
+            d, az = messages.distance_azimuth(*home, *messages.grid_to_latlon(grid))
+            country, approximate = "", 0
+        else:  # placed by its country only
+            d, az = (4200.0, 62.0) if call.startswith("UA9") else (6400.0, 145.0)
+            country, approximate = "Asiatic Russia" if call.startswith("UA9") else "Kenya", 1
+        pclass = messages.propagation_class(d, cls["ground_km"], cls["nvis_km"],
+                                            cls["skip_km"], cls["one_hop_km"])
+        angle = None
+        if d <= cls["one_hop_km"]:
+            angle = messages.takeoff_angle(d, cls["f2_height_km"])
+        gap = _demo_gap(d, az, rng)
+        # Signal on A (dB above the decoding threshold): strong nearby, weak far away.
+        margin_a = 10.0 - 14.0 * _smooth(300.0, 9000.0, d) + float(rng.normal(0, 2.5))
+        first = START_MS + int(rng.integers(0, span - 40)) * slot
+        parity = n % 2
+        first += (parity - (first // slot) % 2) % 2 * slot
+        n_slots = int(rng.integers(4, 14))
+        state, reason = "validated", ""
+        if n % 11 == 5:
+            state, reason, n_slots = "rejected", "too_few", 2
+        elif n % 13 == 7:
+            state, reason = "rejected", "collision"
+        cur = conn.execute(
+            "INSERT INTO tracks (campaign_id, callsign, locator, distance_km, azimuth_deg,"
+            " propagation_class, state, reject_reason, audio_hz, parity, first_ms, last_ms,"
+            " digital_mode, country, approximate, takeoff_deg, closed, n_measures, qso_end)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FT8', ?, ?, ?, 1, ?, 1)",
+            (cid, call, grid, round(d, 1), round(az, 1), pclass, state, reason,
+             float(300 + 50 * n % 2500), parity, first, first + 2 * slot * (n_slots - 1),
+             country, approximate, None if angle is None else round(angle, 1), n_slots))
+        tid = int(cur.lastrowid or 0)
+        rows = []
+        for k in range(n_slots):
+            t = first + 2 * k * slot
+            fade = float(rng.normal(0, 3.0))
+            level_a = -118.0 + margin_a + fade
+            level_b = level_a + gap + float(rng.normal(0, 0.8))
+            for ch, level in ((0, level_a), (1, level_b)):
+                # SNR in 2.5 kHz: the decoding threshold is about -21 dB.
+                snr = level + 120.0 - 21.0
+                rows.append((cid, tid, ch, t, "FT8", call, grid,
+                             f"CQ {call} {grid}".strip() if k == 0 else f"F8DEMO {call} -10",
+                             round(snr), 1 if snr > -20.5 else 0, round(level, 2),
+                             round(-118.0 + float(rng.normal(0, 0.5)) + (1.2 if ch else 0), 2),
+                             "tones"))
+        conn.executemany(
+            "INSERT INTO decodes (campaign_id, track_id, channel_idx, slot_ms, digital_mode,"
+            " callsign, locator, message, snr_db, decoded, level_dbfs, floor_dbfs, guided)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
