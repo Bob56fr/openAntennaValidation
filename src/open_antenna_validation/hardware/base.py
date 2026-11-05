@@ -191,6 +191,11 @@ class SdrDriver(ABC):
         """True while the hardware reports an ADC overload (drivers that can tell)."""
         return False
 
+    def air_epoch(self) -> float | None:
+        """UTC time (s) of sample 0 when the driver knows it exactly (simulator); None for a
+        real receiver, whose sample times are estimated from the reads."""
+        return None
+
     def dbm_offset_db(self, frequency_hz: float) -> float | None:
         """Nominal dBm = dBFS + offset at the current gain; None when unknown.
 

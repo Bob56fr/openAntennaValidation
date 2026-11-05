@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 import uuid as uuidlib
 from dataclasses import dataclass, field
 from typing import Any
@@ -21,6 +22,7 @@ import numpy as np
 
 from open_antenna_validation.config import Config
 from open_antenna_validation.detect import same_signal, select
+from open_antenna_validation.digital.modes import MODES
 from open_antenna_validation.engine import Q_ABSENT, Q_LOST, Q_MISALIGNED, Q_SATURATION
 from open_antenna_validation.installation import current_chain
 from open_antenna_validation.storage import Database
@@ -141,7 +143,14 @@ def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
     if not 1 <= max_signals <= MAX_SIGNALS:
         raise CampaignError(f"De 1 à {MAX_SIGNALS} signaux suivis.")
 
-    if auto:
+    digital = digital_params(cfg, request, inputs, simultaneous)
+    if digital is not None:
+        if auto:
+            raise CampaignError("Le décodage numérique se fait sur une sous-bande imposée, "
+                                "pas en bande automatique.")
+        low, high, center, sdr_hz, signals = _digital_frequencies(
+            cfg, request, digital, bandwidth, tuning_range(sdrs))
+    elif auto:
         low, high = float(request.get("low_hz") or 0), float(request.get("high_hz") or 0)
         if high <= low:
             raise CampaignError("Indiquez une bande : Fmin doit être inférieure à Fmax.")
@@ -160,7 +169,7 @@ def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
             raise CampaignError(
                 f"Cette bande demande d'accorder le SDR hors de sa plage ({tune_low / 1e6:.1f} à "
                 f"{tune_high / 1e6:.1f} MHz) : resserrez-la ou faites plusieurs campagnes.")
-        signals: list[dict[str, Any]] = []
+        signals = []
     else:
         low, high, center, sdr_hz, signals = _fixed_frequencies(cfg, request, bandwidth,
                                                                 tuning_range(sdrs))
@@ -168,7 +177,7 @@ def create_campaign(db: Database, cfg: Config, receiver: dict[str, Any],
     if not 1e6 <= center <= 30e6:
         raise CampaignError("Les fréquences doivent être dans la bande HF (1 à 30 MHz).")
     return _create(db, cfg, request, sdrs, inputs, simultaneous, title, auto, max_signals,
-                   low, high, center, sdr_hz, band, signals, free_bytes)
+                   low, high, center, sdr_hz, band, signals, free_bytes, digital)
 
 
 def _simultaneous_sdrs(request: dict[str, Any], devices: list[dict[str, Any]]
@@ -218,10 +227,63 @@ def _fixed_frequencies(cfg: Config, request: dict[str, Any], bandwidth: float,
     return low, high, center, dc_free_tuning(signals, center, bandwidth, allowed), signals
 
 
+def digital_params(cfg: Config, request: dict[str, Any], inputs: list[str],
+                   simultaneous: bool) -> dict[str, Any] | None:
+    """FT8, FT4 or WSPR decoding asked by the request (option ``digital``), or None."""
+    name = str(request.get("digital") or "")
+    if not name:
+        return None
+    if name not in MODES:
+        raise CampaignError(f"Mode numérique inconnu : {name}.")
+    mode = MODES[name]
+    band = str(request.get("band") or "")
+    sub = next((b for b in cfg.digital.subbands if b.band == band and b.mode == name), None)
+    if sub is None:
+        bands = sorted({b.band for b in cfg.digital.subbands if b.mode == name})
+        raise CampaignError(f"Pas de sous-bande {mode.label} sur « {band or '?'} » : "
+                            f"choisissez une de ces bandes : {', '.join(bands)}.")
+    n_inputs = 1 if simultaneous else len(inputs)
+    # Switching block: every antenna in turn, two slots each (FT8, FT4) or one (WSPR).
+    per_input = 1 if name == "wspr" else 2
+    return {"mode": name, "dial_hz": sub.dial_hz, "band": band,
+            "block_ms": n_inputs * per_input * mode.slot_ms,
+            "seed": int(request.get("seed") or 0) or secrets.randbelow(1 << 30)}
+
+
+DIGITAL_GUARD_HZ = 3_500.0  # audio band of the USB demodulator around dial + 1500 Hz
+
+
+def _digital_frequencies(cfg: Config, request: dict[str, Any], digital: dict[str, Any],
+                         bandwidth: float, allowed: tuple[float, float]
+                         ) -> tuple[float, float, float, float, list[dict[str, Any]]]:
+    """The sub-band as the measured signal (its activity and noise), tuning that keeps the
+    whole audio band of the decoder away from the DC spike."""
+    mode = MODES[digital["mode"]]
+    dial = float(digital["dial_hz"])
+    centre = dial + (mode.audio_low_hz + mode.audio_high_hz) / 2
+    width = mode.audio_high_hz - mode.audio_low_hz
+    signals: list[dict[str, Any]] = [{"freq_hz": centre, "class": "digital", "width_hz": width}]
+    for f in request.get("frequencies") or []:
+        signals.append({"freq_hz": float(f["freq_hz"]), "class": f.get("class", "carrier"),
+                        "width_hz": float(f.get("width_hz")
+                                          or cfg.campaign.class_width_hz.get(
+                                              f.get("class", "carrier"), 200.0))})
+    guard: list[dict[str, Any]] = [*signals,
+                                   {"freq_hz": dial + 1_500.0, "width_hz": DIGITAL_GUARD_HZ}]
+    low = min(x["freq_hz"] - x["width_hz"] / 2 for x in guard)
+    high = max(x["freq_hz"] + x["width_hz"] / 2 for x in guard)
+    if high - low + 10_000 > bandwidth:
+        raise CampaignError("La sous-bande et les fréquences demandées ne tiennent pas dans la "
+                            f"bande utile du SDR ({bandwidth / 1e3:.0f} kHz).")
+    center = (low + high) / 2
+    return low, high, center, dc_free_tuning(guard, center, bandwidth, allowed), signals
+
+
 def _create(db: Database, cfg: Config, request: dict[str, Any], sdrs: list[dict[str, Any]],
             inputs: list[str], simultaneous: bool, title: str, auto: bool, max_signals: int,
             low: float, high: float, center: float, sdr_hz: float, band: str,
-            signals: list[dict[str, Any]], free_bytes: int | None) -> str:
+            signals: list[dict[str, Any]], free_bytes: int | None,
+            digital: dict[str, Any] | None = None) -> str:
     # Channels: the two inputs of one SDR (switched), or one SDR per antenna (simultaneous).
     aa = bool(request.get("aa"))
     channels = request.get("channels") or []
@@ -265,6 +327,13 @@ def _create(db: Database, cfg: Config, request: dict[str, Any], sdrs: list[dict[
 
     window_ms = window_ms_for(cfg, duration_s)
     period_s = min(cfg.campaign.period_s, window_ms / 1000 / 3)
+    if digital is not None and not simultaneous:
+        # Switching between slots: a period is one switching block, so that every period
+        # holds every antenna; the windows are whole blocks.
+        block = int(digital["block_ms"])
+        period_s = block / 1000
+        window_ms = max(window_ms, block)
+        window_ms = -(-window_ms // block) * block
     volume = estimate_volume_bytes(len(signals) or max_signals + 1, n_ch, duration_s, period_s,
                                    window_ms / 1000)
     if free_bytes is not None:
@@ -305,6 +374,7 @@ def _create(db: Database, cfg: Config, request: dict[str, Any], sdrs: list[dict[
         "load_test": request.get("load_test"),
         "volume_bytes": volume,
         "antennas": [],
+        "digital": digital,
     }
     if not title:
         names = [db.query("SELECT name FROM antennas WHERE id = ?", (a,))[0]["name"]
@@ -462,7 +532,8 @@ def engine_spec(run: Running, cfg: Config, channel: int = 0,
     inputs = [p["inputs"][channel]] if run.simultaneous else p["inputs"]
     return {
         "campaign": run.uuid, "inputs": inputs, "channel_base": channel if run.simultaneous else 0,
-        "align": run.simultaneous,
+        "align": run.simultaneous or bool(p.get("digital")),
+        "digital": p.get("digital"),
         "rate_hz": p["rate_hz"],
         "blanking_ms": p["blanking_ms"], "fft_size": cfg.spectrum.fft_size,
         "period_s": period, "start_ms": start, "clip_threshold": cfg.spectrum.clip_threshold,

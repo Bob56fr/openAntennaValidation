@@ -26,6 +26,7 @@ from open_antenna_validation.config import (
     save_config,
 )
 from open_antenna_validation.demo import ensure_demo_campaigns
+from open_antenna_validation.digital.session import DigitalSession, close_tracks
 from open_antenna_validation.hardware import DeviceInfo, HardwareError, SdrDriver
 from open_antenna_validation.hardware import create_driver as default_factory
 from open_antenna_validation.hardware.identity import IdentityCheck, record_hardware
@@ -98,6 +99,8 @@ class Station:
         self.load_test: dict[str, Any] | None = None
         # Publication on the WordPress site (idle while disabled in the configuration).
         self.publisher = Publisher(db, config, self._station_status)
+        # Decoding of a digital campaign (FT8, FT4, WSPR), if the campaign asks for it.
+        self.digital: DigitalSession | None = None
 
     @classmethod
     def from_home(
@@ -135,6 +138,7 @@ class Station:
     def shutdown(self) -> None:
         self._running = False
         self.publisher.stop()
+        self._close_digital(final=False)
         if self._restart is not None:
             self._restart.cancel()
         with self._lock:
@@ -224,8 +228,10 @@ class Station:
         if now_ms() >= run.planned_end_ms:
             end = min(run.planned_end_ms, int(last or run.planned_end_ms))
             cm.finish(self.db, run, "done", end, self.config)
+            close_tracks(self.db, self.config, run.id, run.params)
             return
         self.campaign = run
+        self._open_digital(run)
         # The station was off: the gap is an interruption, closed when the engine restarts.
         self._interrupt(int(last) if last else now_ms(), "Service arrêté")
 
@@ -271,10 +277,18 @@ class Station:
 
     def _start_engines(self, run: cm.Running) -> None:
         """(Re)start the measurement on every SDR of the campaign, on one time grid."""
-        if not run.simultaneous:
+        digital = run.params.get("digital")
+        if not run.simultaneous and not digital:
             self._send("campaign_start", cm.engine_spec(run, self.config))
             return
         start = max(cm.engine_start_ms(run), now_ms() + ALIGN_LEAD_MS)
+        if digital:
+            # A digital campaign starts on a switching block of the UTC slots.
+            block = int(digital["block_ms"])
+            start = -(-start // block) * block
+        if not run.simultaneous:
+            self._send("campaign_start", cm.engine_spec(run, self.config, 0, start))
+            return
         for k, serial in enumerate(run.devices):
             self._send_to(serial, "campaign_start", cm.engine_spec(run, self.config, k, start))
 
@@ -336,6 +350,8 @@ class Station:
             uuid = cm.create_campaign(self.db, self.config, self.receiver, request,
                                       devices=self.devices_report(), free_bytes=free)
             self.campaign = cm.load_running(self.db)
+            if self.campaign is not None:
+                self._open_digital(self.campaign)
             self._start_engine()
         self._publish_status()
         return uuid
@@ -348,9 +364,32 @@ class Station:
             if run.engine_started:
                 self._stop_engines(run)
             cm.finish(self.db, run, "abandoned", now_ms(), self.config)
+            self._close_digital(final=True)
             self.publisher.trigger()
             self.campaign = None
         self._publish_status()
+
+    # --- digital campaigns ------------------------------------------------------------
+
+    def _open_digital(self, run: cm.Running) -> None:
+        if not run.params.get("digital") or self.digital is not None:
+            return
+        self.digital = DigitalSession(
+            self.db, self.config, run.id, run.uuid, run.params, run.n_ch, run.simultaneous,
+            str(run.params["digital"].get("band", "")), self.home / "digital" / run.uuid)
+
+    def _close_digital(self, final: bool) -> None:
+        session, self.digital = self.digital, None
+        if session is not None:
+            session.close(final)
+
+    def _on_slot_audio(self, event: Event) -> None:
+        run, session = self.campaign, self.digital
+        if run is None or session is None or event.get("campaign") != run.uuid:
+            return
+        if int(event["slot_ms"]) >= run.planned_end_ms:
+            return
+        session.add(event)
 
     def _on_measurement(self, event: Event) -> None:
         load = self.load_test
@@ -374,6 +413,7 @@ class Station:
                 self._stop_engines(run)
                 # Closed in the database first: whoever sees no campaign sees it finished.
                 cm.finish(self.db, run, "done", run.planned_end_ms, self.config)
+                self._close_digital(final=True)
                 self.publisher.trigger()
                 self.campaign = None
                 log.info("Campagne %s terminée", run.uuid)
@@ -406,7 +446,8 @@ class Station:
                 "rate_hz": run.params["rate_hz"], "auto": run.auto,
                 "surveying": run.surveying, "last_survey_ms": run.last_survey_ms,
                 "reception": run.reception, "devices": run.devices,
-                "alignment_ms": _percentiles(run.align_ms)}
+                "alignment_ms": _percentiles(run.align_ms),
+                "digital": self.digital.report() if self.digital is not None else None}
 
     # --- load test ------------------------------------------------------------------
 
@@ -520,6 +561,8 @@ class Station:
             self.receiver["gain_index"] = event["gain_index"]
             self.db.log_event("gain_change", {"gain_index": event["gain_index"]})
             self._publish_status()
+        elif kind == "slot_audio":
+            self._on_slot_audio(event)
         elif kind == "measurement":
             self._on_measurement({**event, "serial": self._primary_serial()})
         elif kind in ("survey_result", "survey_error"):
@@ -586,6 +629,8 @@ class Station:
                 except HardwareError:
                     log.exception("Reprise de la campagne")
             self._publish_status()
+        elif kind == "slot_audio":
+            self._on_slot_audio(event)
         elif kind == "measurement":
             self._on_measurement({**event, "serial": serial})
         elif kind in ("survey_result", "survey_error"):

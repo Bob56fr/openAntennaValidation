@@ -48,6 +48,16 @@ fading_period_s = 20.0
 switch_latency_ms = 1.4       # bascule d'antenne simulée : délai…
 switch_glitch_db = 6.0        # …parasite…
 switch_settle_ms = 1.6        # …et temps d'établissement
+digital_stations = true       # stations FT8, FT4 et WSPR décodables (indicatifs fictifs en SIM)
+station_locator = "JN18"      # locator d'où le simulateur voit ces stations
+beam_db = 0.0                 # gain directionnel de ce SDR (mode simultané)…
+antenna_b_beam_db = 4.0       # …de l'antenne B (mode commuté)…
+beam_azimuth_deg = 270.0      # …maximal dans cette direction
+
+[hardware.simulated.digital_dials_hz]  # stations numériques simulées (20 m : loin des signaux de 7,1 MHz)
+ft8 = 14074000.0
+ft4 = 14080000.0
+wspr = 14095600.0
 
 [[hardware.simulated.signals]]  # signaux HF simulés, décalés par rapport au centre
 offset_hz = -62000.0

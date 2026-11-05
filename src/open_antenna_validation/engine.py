@@ -14,12 +14,15 @@ a simulated receiver running faster than real time runs a campaign faster too.
 from __future__ import annotations
 
 import math
+import random
 import time
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 
+from open_antenna_validation.digital import demod
+from open_antenna_validation.digital.modes import MODES
 from open_antenna_validation.dsp.measure import Spectrum, clipping_ratio, db
 from open_antenna_validation.hardware import SdrDriver
 
@@ -50,7 +53,14 @@ class CampaignRunner:
         # Simultaneous mode: this SDR measures one channel, numbered from channel_base.
         self.channel_base = int(spec.get("channel_base", 0))
         self.switching = len(self.inputs) > 1
-        if self.switching:
+        # Digital campaign: decodable slots, switching only between two slots (section 10).
+        self.digital: dict[str, Any] | None = spec.get("digital")
+        if self.digital is not None:
+            self.dwell = int(self.rate * CHUNK_S)
+            self.blank = int(spec["blanking_ms"] * self.rate / 1000) if self.switching else 0
+            if not self.switching and self.inputs[0]:
+                driver.set_antenna(self.inputs[0])
+        elif self.switching:
             cycle_hz = float(spec["rate_hz"])
             self.dwell = max(1, int(self.rate / (len(self.inputs) * cycle_hz)))
             self.blank = min(self.dwell - MIN_FFT,
@@ -79,6 +89,8 @@ class CampaignRunner:
         self.aligned = not (spec.get("align") and driver.realtime)
         self._prepare_bins()
         self._reset()
+        if self.digital is not None:
+            self._prepare_digital(self.digital)
 
     # --- bins of every signal and of its noise neighbourhood ----------------------
 
@@ -156,8 +168,151 @@ class CampaignRunner:
             self.driver.read_iq(skip)
         self._reset()
 
+    # --- digital campaigns ----------------------------------------------------------
+
+    def _prepare_digital(self, digital: dict[str, Any]) -> None:
+        self.dmode = MODES[digital["mode"]]
+        self.dial_hz = float(digital["dial_hz"])
+        offset = self.dial_hz + demod.AUDIO_CENTER_HZ - self.driver.frequency()
+        self.demods = [demod.UsbDemodulator(self.rate, offset) for _ in self.inputs]
+        self.covered: list[int | None] = [None] * len(self.inputs)
+        self.pending: list[int | None] = [None] * len(self.inputs)
+        self.current: int | None = None if self.switching else 0
+        self.blank_left = 0
+        self.seed = int(digital.get("seed", 0))
+        air = self.driver.air_epoch()
+        self.clock: float | None = air
+        if air is not None and not self.driver.realtime:
+            # Simulator faster than real time: its own air clock; start on a switching
+            # block, as the service does for real receivers.
+            block_ms = int(digital["block_ms"])
+            now = air + self.driver.sample_counter() / self.rate
+            start_ms = max(int(self.start_ms), math.ceil(now * 1000))
+            start_ms = -(-start_ms // block_ms) * block_ms
+            skip = round((start_ms / 1000 - now) * self.rate)
+            while skip > 0:
+                n = min(skip, self.dwell)
+                self.driver.read_iq(n)
+                skip -= n
+            self.start_ms = start_ms
+            self._reset()
+
+    def _epoch(self) -> float:
+        """UTC time of sample 0: exact (simulator), else estimated from the reads and
+        refreshed every measurement period (the sample clock drifts from UTC)."""
+        if self.clock is None:
+            if not math.isfinite(self.epoch):
+                self._observe()
+            self.clock = self.epoch
+        return self.clock
+
+    def _input_for(self, slot: int) -> int:
+        n = len(self.inputs)
+        if self.dmode.name == "wspr":
+            # Balanced pseudo-random order: each antenna once per block of n slots.
+            order = list(range(n))
+            random.Random(self.seed * 1_000_003 + slot // n).shuffle(order)
+            return order[slot % n]
+        # FT8 / FT4: every two slots, so that a station sending one slot in two is received
+        # alternately on each antenna.
+        return (slot // 2) % n
+
+    def _index_of(self, t_s: float) -> int:
+        return round((t_s - self._epoch()) * self.rate)
+
+    def _digital_cycle(self) -> list[dict[str, Any]]:
+        if not self.aligned:
+            self._wait_for_start()
+        slot_s = self.dmode.slot_s
+        idx = self.driver.sample_counter()
+        k = math.floor((self._epoch() + idx / self.rate) / slot_s + 1e-9)
+        flushed: list[dict[str, Any]] = []
+        if self.switching:
+            ch = self._input_for(k)
+            if ch != self.current:
+                if self.current is not None:
+                    # Zeros after the last sample push the end of the last slot of the
+                    # antenna that leaves through the demodulator.
+                    old = self.demods[self.current]
+                    old.push(np.zeros(old.n, dtype=np.complex64), idx)
+                    flushed = self._slots_ready(self.current)
+                self.driver.set_antenna(self.inputs[ch])
+                self.current = ch
+                self.blank_left = self.blank
+                self.demods[ch].started = False
+                self.covered[ch] = idx
+                self.pending[ch] = None
+        else:
+            ch = 0
+        boundary = self._index_of((k + 1) * slot_s)
+        n = max(1, min(self.dwell, boundary - idx))
+        chunk = self.driver.read_iq(n)
+        work_start = time.perf_counter()
+        first = self.driver.sample_counter() - n
+        if self.driver.realtime:
+            self._observe()
+            if self.period_first is None:
+                self.period_first = first
+        self.samples += n
+        usable = chunk[min(self.blank_left, n) :]
+        self.blank_left = max(0, self.blank_left - n)
+        self._measure_chunk(ch, usable)
+        if self.covered[ch] is None:
+            self.covered[ch] = first
+        self.demods[ch].push(chunk, first)
+        events = flushed + self._slots_ready(ch)
+        self.busy_s += time.perf_counter() - work_start
+        if self.samples >= self.next_emit:
+            if self.driver.air_epoch() is None and math.isfinite(self.epoch):
+                self.clock = self.epoch  # best estimate of the period that ends
+            events += self._emit()
+            self.next_emit += self.period
+        return events
+
+    def _slots_ready(self, ch: int) -> list[dict[str, Any]]:
+        """Audio of every slot of channel ``ch`` received in full since its activation."""
+        d = self.demods[ch]
+        slot_s = self.dmode.slot_s
+        out: list[dict[str, Any]] = []
+        if self.pending[ch] is None:
+            covered = self.covered[ch] or 0
+            self.pending[ch] = math.ceil((self._epoch() + covered / self.rate) / slot_s - 1e-6)
+        while True:
+            k = int(self.pending[ch] or 0)
+            start = self._index_of(k * slot_s)
+            end = self._index_of((k + 1) * slot_s)
+            if d.available_until < end:
+                return out
+            audio = demod.to_audio(d.take(start, end - start), d.out_rate, d.residual_hz,
+                                   slot_s)
+            out.append({"type": "slot_audio", "campaign": self.spec["campaign"],
+                        "channel": self.channel_base + ch, "slot_ms": round(k * slot_s * 1000),
+                        "mode": self.dmode.name, "audio": audio.tobytes()})
+            self.pending[ch] = k + 1
+
+    def _measure_chunk(self, ch: int, usable: Any) -> None:
+        if len(usable) < self.fft:
+            return
+        if clipping_ratio(usable, self.clip_threshold) >= self.clip_alert:
+            self.saturated[ch] = True
+        frames = Spectrum(self.fft, self.rate).frames(usable)
+        if not len(frames):
+            return
+        self.spectra[ch] += frames.sum(axis=0)
+        self.spectra_n[ch] += len(frames)
+        for k, ((lo, hi), nb, scale) in enumerate(
+            zip(self.signal_bins, self.noise_bins, self.noise_scale, strict=True)
+        ):
+            p = frames[:, lo:hi].sum(axis=1) / self.enbw
+            self.power[ch][k].extend(p.tolist())
+            if len(nb):
+                fl = np.median(frames[:, nb], axis=1) * scale
+                self.floor[ch][k].extend(fl.tolist())
+
     def cycle(self) -> list[dict[str, Any]]:
         """Visit every input once; returns the events to send (measurement, spectra)."""
+        if self.digital is not None:
+            return self._digital_cycle()
         if not self.aligned:
             self._wait_for_start()
         for ch, name in enumerate(self.inputs):

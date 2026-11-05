@@ -11,8 +11,12 @@ are applied at the end.
 
 from __future__ import annotations
 
+import json
 import math
 import time
+from functools import lru_cache
+from importlib import resources
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -41,6 +45,8 @@ FT8_SYMBOL_S = 0.16
 FT8_SYMBOLS = 79
 FT8_TONE_HZ = 6.25
 SSB_TONES_HZ = (420.0, 780.0, 1_150.0, 1_700.0, 2_300.0)
+# Digital stations are synthesised at this rate around their dial frequency.
+_SIM_DIGITAL_RATE = 24_000
 
 # 0 dBFS at gain step 0 corresponds to this input level.
 FULL_SCALE_DBM = -40.0
@@ -71,6 +77,8 @@ class SimulatedDriver(SdrDriver):
         self._started = 0.0
         # (effect sample, antenna) of every switch, oldest first; the first one is the start.
         self._switches: list[tuple[int, str]] = [(0, "A")]
+        self._layout_rate = 0
+        self._layout: dict[str, list[tuple[dict[str, Any], float, float, float, float]]] = {}
 
     # --- device ----------------------------------------------------------------
 
@@ -92,7 +100,10 @@ class SimulatedDriver(SdrDriver):
         self._started = time.monotonic()
         # Air time = wall clock at the start + samples: several simulated SDRs opened at
         # the same moment see the same fading, voices and FT8 slots at the same instant.
-        self._epoch = time.time() if self._config.realtime else 0.0
+        # Faster than real time: the UTC second of the start, the same for every simulated
+        # SDR opened in that second; a digital campaign then waits for its first slot.
+        now = time.time()
+        self._epoch = now if self._config.realtime else float(math.floor(now))
         self._switches = [(0, self.effective_antenna(self.detect()[0]))]
 
     def close(self) -> None:
@@ -166,6 +177,9 @@ class SimulatedDriver(SdrDriver):
     def sample_counter(self) -> int:
         return self._sample
 
+    def air_epoch(self) -> float | None:
+        return self._epoch
+
     def supported_sample_rates(self) -> list[int]:
         return list(_RATES)
 
@@ -174,28 +188,31 @@ class SimulatedDriver(SdrDriver):
 
     # --- synthetic air -----------------------------------------------------------
 
-    def _carrier(self, s: SimulatedSignal, off: float, t: Floats) -> npt.NDArray[np.complex128]:
-        return np.exp(2j * math.pi * off * t)
+    def _carrier(self, s: SimulatedSignal, off: float, t: Floats,
+                 tr: Floats) -> npt.NDArray[np.complex128]:
+        return np.exp(2j * math.pi * off * tr)
 
-    def _ssb(self, s: SimulatedSignal, off: float, t: Floats) -> npt.NDArray[np.complex128]:
+    def _ssb(self, s: SimulatedSignal, off: float, t: Floats,
+             tr: Floats) -> npt.NDArray[np.complex128]:
         # Syllables at about 4 Hz, pauses between words: the envelope a speech signal has.
         syllable = np.abs(np.sin(2 * math.pi * 2.1 * t + 0.7 * np.sin(2 * math.pi * 0.37 * t)))
         words = (np.sin(2 * math.pi * 0.23 * t + s.offset_hz) > -0.4).astype(np.float64)
         env = syllable * words
         out = np.zeros(len(t), dtype=np.complex128)
         for k, tone in enumerate(SSB_TONES_HZ):
-            phase = 2 * math.pi * (off + tone) * t + k * 1.3
+            phase = 2 * math.pi * (off + tone) * tr + k * 1.3
             out += np.exp(1j * phase) / len(SSB_TONES_HZ)
         return env * out * 2.0
 
-    def _ft8(self, s: SimulatedSignal, off: float, t: Floats) -> npt.NDArray[np.complex128]:
+    def _ft8(self, s: SimulatedSignal, off: float, t: Floats,
+             tr: Floats) -> npt.NDArray[np.complex128]:
         slot = np.floor(t / FT8_SLOT_S).astype(np.int64)
         local = t - slot * FT8_SLOT_S - FT8_START_S
         on = (local >= 0) & (local < FT8_SYMBOLS * FT8_SYMBOL_S) & (slot % 2 == 0)
         symbol = np.clip((local / FT8_SYMBOL_S).astype(np.int64), 0, FT8_SYMBOLS - 1)
         # Pseudo-random tone sequence, reproducible per slot and symbol.
         tone = (slot * 7919 + symbol * 104_729 + int(s.offset_hz)) % 8
-        phase = 2 * math.pi * (off + tone * FT8_TONE_HZ) * t
+        phase = 2 * math.pi * (off + tone * FT8_TONE_HZ) * tr
         wave: npt.NDArray[np.complex128] = on * np.exp(1j * phase)
         return wave
 
@@ -219,7 +236,10 @@ class SimulatedDriver(SdrDriver):
         if not self._open:
             raise HardwareError("Appareil simulé non ouvert.")
         first = self._sample
-        t = self._epoch + (first + np.arange(n)) / self._rate
+        # Air time (UTC) for slots, fading and envelopes; phases on the time since open,
+        # which keeps their precision (2π·f·t at t ≈ 1.7e9 s would smear the carriers).
+        tr = (first + np.arange(n)) / self._rate
+        t = self._epoch + tr
         self._sample += n
         cfg = self._config
         on_b, glitch = self._antenna_track(first, n)
@@ -232,8 +252,10 @@ class SimulatedDriver(SdrDriver):
             if abs(off) >= self._rate / 2:
                 continue
             wave = {"carrier": self._carrier, "ssb": self._ssb, "ft8": self._ft8}[s.kind](
-                s, off, t)
+                s, off, t, tr)
             air += 10 ** (s.dbfs / 20) * wave
+        if cfg.digital_stations:
+            air += self._digital_air(t, tr, on_b)
         air *= 10 ** ((fading_db + cfg.signal_offset_db
                        + np.where(on_b, cfg.antenna_b_signal_db, 0.0)) / 20)
 
@@ -253,3 +275,111 @@ class SimulatedDriver(SdrDriver):
             if delay > 0:
                 time.sleep(delay)
         return out
+
+    # --- decodable digital stations ------------------------------------------------
+
+    def _digital_air(self, t: Floats, tr: Floats,
+                     on_b: npt.NDArray[np.bool_]) -> npt.NDArray[np.complex128]:
+        """FT8, FT4 and WSPR transmissions of the simulated stations: real channel symbols
+        (WSJT-X encoders, digital/sim_stations.json), Gaussian shaping as in WSJT-X.
+
+        Each mode is synthesised at 24 kHz around its dial frequency (cheap), then
+        interpolated to the receiver rate and shifted once."""
+        from open_antenna_validation.digital.modes import MODES
+
+        table = _sim_stations()
+        out = np.zeros(len(t), dtype=np.complex128)
+        step = 1 / _SIM_DIGITAL_RATE
+        t24 = np.arange(math.floor(t[0] / step) - 1, math.ceil(t[-1] / step) + 2) * step
+        b_share = float(on_b.mean()) if len(on_b) else 0.0
+        for name, dial in self._config.digital_dials_hz.items():
+            off = dial - self._frequency
+            if abs(off) >= self._rate / 2 - 3000:
+                continue
+            mode = MODES[name]  # type: ignore[index]
+            base = np.zeros(len(t24), dtype=np.complex128)
+            for st, audio_hz, gain_a, gain_b, amp_db in self._digital_layout()[name]:
+                for k in range(math.floor(t24[0] / mode.slot_s),
+                               math.floor(t24[-1] / mode.slot_s) + 1):
+                    text = _sim_message(name, st, k, table["partner"])
+                    if text is None:
+                        continue
+                    local = t24 - (k * mode.slot_s + mode.start_s + 0.1)
+                    on = (local >= 0) & (local < mode.duration_s)
+                    if not on.any():
+                        continue
+                    phase = _sim_phase(name, text)
+                    pos = local[on] * 12_000
+                    i = np.minimum(pos.astype(np.int64), len(phase) - 2)
+                    frac = pos - i
+                    ph = phase[i] * (1 - frac) + phase[i + 1] * frac
+                    # Antenna of the block (a switch falls between two slots).
+                    gain = gain_b if b_share > 0.5 else gain_a
+                    base[on] += 10 ** ((amp_db + gain) / 20) * np.exp(
+                        1j * (ph + 2 * math.pi * audio_hz * t24[on]))
+            if not base.any():
+                continue
+            seg = np.interp(t, t24, base.real) + 1j * np.interp(t, t24, base.imag)
+            out += seg * np.exp(2j * math.pi * off * tr)
+        return out
+
+    def _digital_layout(self) -> dict[str, list[tuple[dict[str, Any], float, float, float,
+                                                      float]]]:
+        """Per mode: (station, audio frequency, gain on A, gain on B, level) of every
+        simulated transmitter; computed once per sample rate."""
+        if self._layout_rate == self._rate:
+            return self._layout
+        from open_antenna_validation.digital import messages
+
+        cfg = self._config
+        home = messages.grid_to_latlon(cfg.station_locator) if cfg.station_locator else None
+        noise_2500 = cfg.noise_dbfs - 10 * math.log10(self._rate / 2500)
+        layout: dict[str, list[tuple[dict[str, Any], float, float, float, float]]] = {}
+        for name in cfg.digital_dials_hz:
+            for st in _sim_stations()["stations"]:
+                gain_a = gain_b = 0.0
+                if home is not None:
+                    az = messages.distance_azimuth(
+                        *home, *messages.grid_to_latlon(st["grid"]))[1]
+                    lobe = math.cos(math.radians(az - cfg.beam_azimuth_deg))
+                    gain_a = cfg.beam_db * lobe
+                    gain_b = gain_a + cfg.antenna_b_beam_db * lobe
+                layout.setdefault(name, []).append(
+                    (st, float(st["audio_hz"][name]), gain_a, gain_b, noise_2500 + st["snr_db"]))
+        self._layout_rate = self._rate
+        self._layout = layout
+        return layout
+
+
+@lru_cache(maxsize=1)
+def _sim_stations() -> dict[str, Any]:
+    text = resources.files("open_antenna_validation.digital").joinpath(
+        "sim_stations.json").read_text(encoding="utf-8")
+    data: dict[str, Any] = json.loads(text)
+    return data
+
+
+def _sim_message(mode: str, st: dict[str, Any], slot: int, partner: str) -> str | None:
+    """What a simulated station sends in ``slot``: QSO cycles on its own parity (CQ, reply,
+    report, RR73, then a pause), WSPR about one slot in three."""
+    salt = sum(map(ord, st["call"]))
+    if mode == "wspr":
+        return f"{st['call']} {st['grid']} 37" if (slot * 7 + salt) % 3 == 0 else None
+    if slot % 2 != st["parity"]:
+        return None
+    step = (slot // 2 + salt) % 10
+    call, grid = st["call"], st["grid"]
+    texts = [f"CQ {call} {grid}", f"{partner} {call} {grid}", f"{partner} {call} -12",
+             f"{partner} {call} RR73"]
+    return texts[step] if step < len(texts) else None
+
+
+@lru_cache(maxsize=256)
+def _sim_phase(mode: str, text: str) -> Floats:
+    """Phase (rad) of the transmission at 12 kHz, relative to its tone 0 carrier."""
+    from open_antenna_validation.digital import synth
+    from open_antenna_validation.digital.modes import AUDIO_RATE, MODES
+
+    tones = [int(c) for c in _sim_stations()["tones"][mode][text]]
+    freq = synth.frequency_track(tones, MODES[mode], 0.0)  # type: ignore[index]
+    return np.asarray(2 * math.pi * np.cumsum(freq) / AUDIO_RATE)

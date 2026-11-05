@@ -98,6 +98,17 @@ class SimulatedConfig(_Section):
     switch_latency_ms: float = Field(default=1.4, ge=0.0)
     switch_glitch_db: float = Field(default=6.0, ge=0.0)
     switch_settle_ms: float = Field(default=1.6, ge=0.0)
+    # Decodable FT8, FT4 and WSPR stations (digital/sim_stations.json) on these dial
+    # frequencies (20 m: away from the analogue signals around 7.1 MHz), seen from this
+    # locator. Directional gain (dB, cosine of the azimuth
+    # difference): antenna B in switched mode, this SDR in simultaneous mode.
+    digital_stations: bool = True
+    digital_dials_hz: dict[str, float] = Field(default_factory=lambda: {
+        "ft8": 14_074_000.0, "ft4": 14_080_000.0, "wspr": 14_095_600.0})
+    station_locator: str = "JN18"
+    beam_db: float = 0.0
+    antenna_b_beam_db: float = 4.0
+    beam_azimuth_deg: float = 270.0
 
 
 class SdrSlot(_Section):
@@ -112,6 +123,7 @@ class SdrSlot(_Section):
     sim_signal_offset_db: float = 0.0
     sim_noise_offset_db: float = 0.0
     sim_gain_error_db: float = 0.0
+    sim_beam_db: float = 0.0
 
 
 class HardwareConfig(_Section):
@@ -139,7 +151,7 @@ class HardwareConfig(_Section):
         sim = self.simulated.model_copy(update={
             "serial": slot.serial, "signal_offset_db": slot.sim_signal_offset_db,
             "noise_offset_db": slot.sim_noise_offset_db,
-            "gain_error_db": slot.sim_gain_error_db})
+            "gain_error_db": slot.sim_gain_error_db, "beam_db": slot.sim_beam_db})
         return self.model_copy(update={"driver": slot.driver or self.driver,
                                        "serial": slot.serial, "antenna": slot.antenna,
                                        "simulated": sim, "others": []})
@@ -357,7 +369,8 @@ def _per_mode(ft8: float, ft4: float, wspr: float) -> dict[str, float]:
 
 def _default_ground_km() -> dict[str, float]:
     # Ground wave range by band, ambiguous with NVIS (cahier des charges, section 10).
-    return {"80 m": 80.0, "40 m": 60.0, "30 m": 50.0, "20 m": 40.0, "17 m": 35.0, "15 m": 35.0, "12 m": 30.0, "10 m": 30.0}
+    return {"80 m": 80.0, "40 m": 60.0, "30 m": 50.0, "20 m": 40.0, "17 m": 35.0,
+            "15 m": 35.0, "12 m": 30.0, "10 m": 30.0}
 
 
 class DigitalConfig(_Section):
