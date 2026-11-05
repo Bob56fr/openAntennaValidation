@@ -63,9 +63,10 @@ def test_switched_ft8_campaign_decodes_measures_and_tracks(station_home: Path) -
         assert all(d["guided"] == "tones" and d["level_dbfs"] is not None for d in decodes
                    if d["decoded"])
         tracks = station.db.query("SELECT * FROM tracks WHERE campaign_id = ?", (cid,))
-        calls = {t["callsign"] for t in tracks}
-        assert calls <= {"F6SIM", "F5SIM", "G4SIM", "DL1SIM", "I2SIM", "EA7SIM", "LA9SIM",
-                         "SV1SIM", "K1SIM", "PY2SIM", "ZS6SIM", "JA1SIM"}
+        # jt9 sometimes decodes a call out of the noise: such a track never validates.
+        calls = {t["callsign"] for t in tracks if t["state"] == "validated"}
+        assert calls and calls <= {"F6SIM", "F5SIM", "G4SIM", "DL1SIM", "I2SIM", "EA7SIM",
+                                   "LA9SIM", "SV1SIM", "K1SIM", "PY2SIM", "ZS6SIM", "JA1SIM"}
         assert all(t["closed"] == 1 for t in tracks)  # the end of the campaign closes them
         assert any(t["state"] == "validated" for t in tracks)
         k1 = [t for t in tracks if t["callsign"] == "K1SIM" and t["locator"]]
@@ -74,3 +75,39 @@ def test_switched_ft8_campaign_decodes_measures_and_tracks(station_home: Path) -
     finally:
         station.shutdown()
         station.db.close()
+
+
+def test_gaps_by_pivot_and_by_pairs(station: Station) -> None:
+    """Switched: B against A interpolated around it; simultaneous: same slot."""
+    from open_antenna_validation.digital.results import _paired, _pivot, digital_results
+
+    # A fades linearly (-90 → -84 dB), B sits 3 dB under the A of its instant.
+    switched = [(0, 0, -90.0), (30, 1, -92.0), (60, 0, -88.0), (90, 1, -90.0),
+                (120, 0, -86.0), (150, 1, -88.0)]
+    assert _pivot(switched, 1, 0) == pytest.approx([-3.0, -3.0])  # the last B has no A after
+    simultaneous = [(0, 0, -90.0), (0, 1, -93.5), (15, 0, -80.0), (15, 1, -82.5), (30, 0, -85.0)]
+    assert _paired(simultaneous, 1, 0) == pytest.approx([-3.5, -2.5])
+    db = station.db
+    with db.transaction() as conn:
+        cid = int(conn.execute(
+            "INSERT INTO campaigns (uuid, reception_mode, measure_mode, low_hz, high_hz, state,"
+            " created_ms, n_channels) VALUES ('d1', 'simultaneous', 'fixed', 14e6, 14.1e6,"
+            " 'done', 0, 2)").lastrowid or 0)
+        tid = int(conn.execute(
+            "INSERT INTO tracks (campaign_id, callsign, locator, distance_km, azimuth_deg,"
+            " propagation_class, state, first_ms, last_ms, takeoff_deg) VALUES"
+            " (?, 'DL1SIM', 'JO62', 830, 54, 'skip', 'validated', 0, 30, 33)", (cid,)).lastrowid
+                  or 0)
+        for slot, ch, level, decoded in ((0, 0, -90.0, 1), (0, 1, -93.0, 0), (15, 0, -91.0, 1),
+                                         (15, 1, -94.0, 1)):
+            conn.execute(
+                "INSERT INTO decodes (campaign_id, track_id, channel_idx, slot_ms, digital_mode,"
+                " callsign, message, level_dbfs, decoded) VALUES (?, ?, ?, ?, 'FT8', 'DL1SIM',"
+                " 'CQ DL1SIM JO62', ?, ?)", (cid, tid, ch, slot, level, decoded))
+    res = digital_results(db, cid, 2, 0, True, "JN18")
+    assert res["method"] == "paired" and res["overall"][1]["median"] == -3.0
+    st = res["stations"][0]
+    assert st["call"] == "DL1SIM" and st["decoded_by"] == [0, 1] and st["gap"][1]["n"] == 2
+    assert res["groups"]["class"]["skip"][1]["n"] == 2
+    assert res["groups"]["azimuth"]["30"][1]["median"] == -3.0
+    assert res["decoded_sets"] == {"0,1": 1}
