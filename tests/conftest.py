@@ -27,6 +27,7 @@ def station_home(tmp_path: Path) -> Path:
     config.station.id = "test-station"
     config.hardware.driver = "simulated"
     config.hardware.simulated.realtime = False
+    config.digital.ntp_interval_s = 0.0  # no network in the tests
     config.spectrum.fps = 10.0
     config.web.session_secret = "secret-de-test"
     config.web.password_hash = hash_password(PASSWORD)

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from open_antenna_validation import __version__
+from open_antenna_validation import __version__, clock
 from open_antenna_validation import campaign_manager as cm
 from open_antenna_validation.acquisition import Acquisition, Event
 from open_antenna_validation.config import (
@@ -103,6 +103,9 @@ class Station:
         self.publisher = Publisher(db, config, self._station_status)
         # Decoding of a digital campaign (FT8, FT4, WSPR), if the campaign asks for it.
         self.digital: DigitalSession | None = None
+        # Offset of the station clock (NTP), checked in the background.
+        self.clock: dict[str, Any] | None = None
+        self._clock_stop = threading.Event()
 
     @classmethod
     def from_home(
@@ -136,9 +139,12 @@ class Station:
         for dev in self._others:
             self._start_other(dev)
         self.publisher.start()
+        if self.config.digital.ntp_interval_s > 0:
+            threading.Thread(target=self._clock_loop, name="clock", daemon=True).start()
 
     def shutdown(self) -> None:
         self._running = False
+        self._clock_stop.set()
         self.publisher.stop()
         self._close_digital(final=False)
         if self._restart is not None:
@@ -410,6 +416,32 @@ class Station:
         session, self.digital = self.digital, None
         if session is not None:
             session.close(final)
+
+    def _clock_loop(self) -> None:
+        cfg = self.config.digital
+        while not self._clock_stop.is_set():
+            state = clock.check(cfg.ntp_server, cfg.clock_tolerance_s, now_ms())
+            if self.clock is None or state["ok"] != self.clock.get("ok"):
+                if state["message"]:
+                    log.warning("%s", state["message"])
+                self.db.log_event("clock", {k: state[k] for k in ("server", "offset_s", "ok")})
+            self.clock = state
+            self._clock_stop.wait(cfg.ntp_interval_s)
+
+    def _clock_report(self) -> dict[str, Any] | None:
+        """NTP check, and the offset seen by the decoders during a digital campaign."""
+        report = dict(self.clock) if self.clock else None
+        session = self.digital
+        dt = session.clock_offset_s() if session is not None else None
+        if dt is not None:
+            report = report or {}
+            report["decoders_dt_s"] = dt
+            if abs(dt) > self.config.digital.clock_tolerance_s:
+                report["ok"] = False
+                report["message"] = (
+                    f"Les stations décodées arrivent en moyenne {dt:+.1f} s après le début des "
+                    "créneaux : l'horloge de la station est probablement décalée.")
+        return report
 
     def _on_slot_audio(self, event: Event) -> None:
         run, session = self.campaign, self.digital
@@ -805,6 +837,7 @@ class Station:
             "devices": [{k: v for k, v in d.items() if k not in ("antennas", "gain_steps")}
                         for d in self.devices_report()],
             "load_test": self.load_report(),
+            "clock": self._clock_report(),
         }
 
     def _station_status(self) -> dict[str, Any]:

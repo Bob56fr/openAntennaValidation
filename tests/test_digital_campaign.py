@@ -111,3 +111,27 @@ def test_gaps_by_pivot_and_by_pairs(station: Station) -> None:
     assert res["groups"]["class"]["skip"][1]["n"] == 2
     assert res["groups"]["azimuth"]["30"][1]["median"] == -3.0
     assert res["decoded_sets"] == {"0,1": 1}
+
+
+def test_csv_export_of_decodes_and_tracks(station: Station) -> None:
+    from open_antenna_validation.export import export_csv, filename
+
+    db = station.db
+    with db.transaction() as conn:
+        cid = int(conn.execute(
+            "INSERT INTO campaigns (uuid, reception_mode, measure_mode, low_hz, high_hz, state,"
+            " created_ms, start_ms, n_channels, band) VALUES ('e1', 'switched', 'fixed', 14e6,"
+            " 14.1e6, 'done', 0, 0, 2, '20 m')").lastrowid or 0)
+        tid = int(conn.execute(
+            "INSERT INTO tracks (campaign_id, callsign, state, first_ms, last_ms, n_measures)"
+            " VALUES (?, 'K1SIM', 'validated', 0, 15000, 3)", (cid,)).lastrowid or 0)
+        conn.execute(
+            "INSERT INTO decodes (campaign_id, track_id, channel_idx, slot_ms, digital_mode,"
+            " callsign, message, level_dbfs, decoded, snr_db) VALUES (?, ?, 1, 15000, 'FT8',"
+            " 'K1SIM', 'CQ K1SIM FN42', -112.25, 1, -14)", (cid, tid))
+    lines = "".join(export_csv(db, "e1", "decodes", french=True)).splitlines()
+    assert lines[0].lstrip("\ufeff").startswith("slot_utc;slot_ms;mode;channel")
+    assert ";B;" in lines[1] and "-112,25" in lines[1] and lines[1].endswith(";validated")
+    tracks = "".join(export_csv(db, "e1", "tracks")).splitlines()
+    assert tracks[1].startswith(f"{tid},K1SIM,,validated")
+    assert filename(db, "e1", "tracks").endswith("-pistes.csv")

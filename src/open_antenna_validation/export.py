@@ -20,7 +20,9 @@ from open_antenna_validation.campaigns import LETTERS, CampaignNotFound
 from open_antenna_validation.engine import QUALITY_LABELS
 from open_antenna_validation.storage import Database
 
-KINDS = ("aggregates", "measurements")
+KINDS = ("aggregates", "measurements", "decodes", "tracks")
+FILE_WORDS = {"aggregates": "agregats", "measurements": "mesures", "decodes": "decodages",
+              "tracks": "pistes"}
 BATCH = 5000
 
 
@@ -59,7 +61,7 @@ def filename(db: Database, uuid: str, kind: str) -> str:
         raise CampaignNotFound(uuid)
     day = datetime.fromtimestamp((rows[0]["start_ms"] or 0) / 1000, UTC).strftime("%Y%m%d")
     band = (rows[0]["band"] or "hf").replace(" ", "")
-    return f"oav-{band}-{day}-{uuid[:8]}-{'agregats' if kind == 'aggregates' else 'mesures'}.csv"
+    return f"oav-{band}-{day}-{uuid[:8]}-{FILE_WORDS[kind]}.csv"
 
 
 def export_csv(db: Database, uuid: str, kind: str, *, french: bool = False) -> Iterator[str]:
@@ -93,6 +95,36 @@ def export_csv(db: Database, uuid: str, kind: str, *, french: bool = False) -> I
                          LETTERS[ch], names.get(ch, ""), r["n"], r["rssi_med"], r["rssi_p10"],
                          r["rssi_p90"], r["rssi_sd"], r["floor_med"], r["snr_med"],
                          r["dref_med"], r["dref_p10"], r["dref_p90"]])
+        return
+    if kind == "decodes":
+        # One line per message, slot and channel: decoded there, or only measured there.
+        yield w.row(["slot_utc", "slot_ms", "mode", "channel", "antenna", "decoded", "message",
+                     "callsign", "locator", "snr_db", "dt_s", "audio_hz", "power_dbm",
+                     "level_dbfs", "floor_dbfs", "guided", "flags", "track_id", "track_state"])
+        query = ("SELECT d.*, t.state AS track_state FROM decodes d LEFT JOIN tracks t"
+                 " ON t.id = d.track_id WHERE d.campaign_id = ? ORDER BY d.slot_ms, d.message,"
+                 " d.channel_idx")
+        for r in _batches(db, query, cid):
+            ch = int(r["channel_idx"])
+            yield w.row([_iso(r["slot_ms"]), r["slot_ms"], r["digital_mode"], LETTERS[ch],
+                         names.get(ch, ""), int(r["decoded"]), r["message"], r["callsign"],
+                         r["locator"], r["snr_db"], r["dt_s"], r["audio_hz"], r["power_dbm"],
+                         r["level_dbfs"], r["floor_dbfs"], r["guided"], r["flags"],
+                         r["track_id"], r["track_state"] or ""])
+        return
+    if kind == "tracks":
+        yield w.row(["track_id", "callsign", "mode", "state", "reject_reason", "locator",
+                     "locator_changed", "country", "approximate_position", "distance_km",
+                     "azimuth_deg", "propagation_class", "takeoff_deg", "audio_hz", "parity",
+                     "measured_slots", "qso_end", "first_utc", "last_utc"])
+        query = "SELECT * FROM tracks WHERE campaign_id = ? ORDER BY first_ms, id"
+        for r in _batches(db, query, cid):
+            yield w.row([r["id"], r["callsign"], r["digital_mode"], r["state"],
+                         r["reject_reason"], r["locator"], int(r["locator_changed"]),
+                         r["country"], int(r["approximate"]), r["distance_km"],
+                         r["azimuth_deg"], r["propagation_class"], r["takeoff_deg"],
+                         r["audio_hz"], r["parity"], r["n_measures"], int(r["qso_end"]),
+                         _iso(r["first_ms"]), _iso(r["last_ms"])])
         return
     params = json.loads(c["params_json"] or "{}")
     corrections = cm.corrections_for(params, list(signals.values()), int(c["n_channels"]),

@@ -623,7 +623,7 @@ function renderExport() {
   if (!real) return;
   const dialect = $("csv-dialect").value;
   const url = (kind) => CFG.exportUrl(R.campaign.uuid, kind, dialect);
-  $("export-links").innerHTML = `<a class="btn ghost" href="${url("aggregates")}" download>Agrégats par fenêtre</a>${R.quality.raw ? `<a class="btn ghost" href="${url("measurements")}" download>Mesures brutes</a>` : ""}`;
+  $("export-links").innerHTML = `<a class="btn ghost" href="${url("aggregates")}" download>Agrégats par fenêtre</a>${R.quality.raw ? `<a class="btn ghost" href="${url("measurements")}" download>Mesures brutes</a>` : ""}${R.digital ? `<a class="btn ghost" href="${url("decodes")}" download>Décodages</a><a class="btn ghost" href="${url("tracks")}" download>Pistes par station</a>` : ""}`;
 }
 $("csv-dialect").addEventListener("change", () => {
   try { localStorage.setItem("oav-csv", $("csv-dialect").value); } catch (e) { /* stockage indisponible */ }

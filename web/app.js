@@ -56,6 +56,9 @@ function renderStatus(report) {
   if (report.sample_rate) parts.push(`<span>${NF1.format(report.sample_rate / 1000)} kS/s · bande utile ${Math.round(report.bandwidth_hz / 1000)} kHz</span>`);
   if (report.identity) parts.push(`<span class="mono" style="font-size:12.5px">${report.identity}</span>`);
   $("meta").innerHTML = parts.join("");
+  const clk = report.clock;
+  $("clock-warn").hidden = !(clk && clk.ok === false);
+  $("clock-warn").textContent = clk && clk.ok === false ? clk.message : "";
   if (report.state === "absent") {
     showError(`${report.error} Les données de la station restent consultables ; le SDR sera détecté automatiquement dès qu'il sera branché.`, null, "warn");
   } else {
