@@ -325,6 +325,22 @@ Ces SDR ont besoin du pilote WinUSB. Zadig va s'ouvrir :
     }
 }
 
+Step "5d. Décodeurs des modes numériques (WSJT-X)"
+# FT8, FT4 et WSPR sont décodés par les programmes de WSJT-X, installé par l'utilisateur
+# depuis le site de ses auteurs (comme l'API SDRplay). L'installeur le cherche seulement.
+$WsjtxBin = ""
+foreach ($dir in @("C:\WSJT\wsjtx\bin", (Join-Path $env:ProgramFiles "wsjtx\bin"))) {
+    if (Test-Path (Join-Path $dir "jt9.exe")) { $WsjtxBin = $dir; break }
+}
+if ($WsjtxBin) {
+    Ok "WSJT-X : $WsjtxBin"
+    if (-not (Test-Path (Join-Path $WsjtxBin "ft4code.exe"))) {
+        Warn "WSJT-X pour Windows n'a pas d'encodeur FT4 ni WSPR : ces mesures suivront les tons lus dans le signal (moins précises près du seuil de décodage). Debian n'a pas cette limite."
+    }
+} else {
+    Warn "WSJT-X introuvable : les campagnes FT8/FT4/WSPR seront refusées. Installez WSJT-X (https://wsjt.sourceforge.io/wsjtx.html) puis relancez ce script."
+}
+
 Step "6. Environnement Python"
 New-Item -ItemType Directory -Force $Prefix | Out-Null
 $VenvPython = Join-Path $Venv "Scripts\python.exe"
@@ -354,7 +370,9 @@ config = load_config(path)
 config.web.port = int(sys.argv[1])
 # Paths of the libraries installed here ("-": none); a Linux path (imported station) is
 # cleared, another path is kept.
-rtlsdr, airspyhf = ("" if a == "-" else a for a in sys.argv[2:4])
+rtlsdr, airspyhf, wsjtx = ("" if a == "-" else a for a in (sys.argv[2:5] + ["-"] * 3)[:3])
+if wsjtx:
+    config.digital.wsjtx_path = wsjtx
 for section, built in ((config.hardware.rtlsdr, rtlsdr),
                        (config.hardware.airspyhf, airspyhf),
                        (config.hardware.sdrplay, "")):
@@ -367,7 +385,8 @@ save_config(config, path)
 # Empty arguments are dropped by PowerShell 5.1: "-" stands for none.
 $a2 = if ($RtlsdrLib) { $RtlsdrLib } else { "-" }
 $a3 = if ($AirspyhfLib) { $AirspyhfLib } else { "-" }
-$code | & $VenvPython - $Port $a2 $a3
+$a4 = if ($WsjtxBin) { $WsjtxBin } else { "-" }
+$code | & $VenvPython - $Port $a2 $a3 $a4
 if ($LASTEXITCODE -ne 0) { Fail "écriture de la configuration impossible." }
 # Data readable only by the system, the administrators and the station's user (password
 # hash, WordPress tokens), like the 0750 directory under Linux.

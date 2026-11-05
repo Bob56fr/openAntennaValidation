@@ -45,6 +45,9 @@ def test_script_encodings() -> None:
         path.read_bytes().decode("ascii")  # cmd.exe code page: ASCII only
     for path in LINUX.glob("*.sh"):
         assert b"\r\n" not in path.read_bytes(), path.name
+    for path in [*WINDOWS.iterdir(), *LINUX.glob("*.sh")]:
+        # A "\b" written through Python once became a backspace in a Windows path.
+        assert not any(c < 9 or 13 < c < 32 for c in path.read_bytes()), path.name
 
 
 def test_pinned_downloads_have_a_sha256() -> None:

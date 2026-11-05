@@ -214,6 +214,15 @@ if has_sdr rtlsdr || has_sdr airspyhf; then
   echo "Débranchez et rebranchez les SDR USB pour appliquer les règles udev."
 fi
 
+step "4c bis. Décodeurs des modes numériques (WSJT-X)"
+# FT8, FT4 et WSPR sont décodés par les programmes de WSJT-X (jt9, wsprd, ft8code…), paquet
+# officiel de Debian ; sans les paquets seulement recommandés (pas d'interface graphique).
+if apt-get install -y --no-install-recommends wsjtx; then
+  echo "OK : $(command -v jt9) et $(command -v wsprd)"
+else
+  echo "ATTENTION : paquet wsjtx indisponible : les campagnes FT8/FT4/WSPR seront refusées."
+fi
+
 step "4d. Horloge"
 # Les créneaux FT8/WSPR et l'alignement des SDR demandent une horloge synchronisée.
 if systemctl is-active --quiet chrony || systemctl is-active --quiet ntpsec     || systemctl is-active --quiet ntp; then
