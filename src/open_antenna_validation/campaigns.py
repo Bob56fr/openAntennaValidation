@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from open_antenna_validation.digital.results import digital_results
 from open_antenna_validation.installation import (
     ANTENNA_TYPES,
     POLARIZATIONS,
@@ -95,8 +96,16 @@ def campaign_results(db: Database, uuid: str) -> dict[str, Any]:
             floor[a["channel_idx"]][i] = a["floor_med"]
         signals.append({**sig, "rssi": rssi, "floor": floor})
     quality = meta.pop("quality")
+    params = _params(db.query("SELECT params_json FROM campaigns WHERE id = ?", (cid,))[0])
+    digital = None
+    if params.get("digital"):
+        c = meta["campaign"]
+        digital = {**digital_results(db, cid, n_ch, int(c["reference_channel"]),
+                                     c["reception_mode"] == "simultaneous",
+                                     str(params.get("locator") or "")),
+                   "mode": params["digital"]["mode"], "dial_hz": params["digital"]["dial_hz"]}
     return {**meta, "windows": {"start_ms": first, "step_ms": step, "count": count},
-            "signals": signals, "quality": quality}
+            "signals": signals, "quality": quality, "digital": digital}
 
 
 def campaign_meta(db: Database, uuid: str, *, locator_chars: int = 6) -> dict[str, Any]:

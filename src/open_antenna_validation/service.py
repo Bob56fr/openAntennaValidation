@@ -26,6 +26,8 @@ from open_antenna_validation.config import (
     save_config,
 )
 from open_antenna_validation.demo import ensure_demo_campaigns
+from open_antenna_validation.digital import wsjtx
+from open_antenna_validation.digital.modes import MODES
 from open_antenna_validation.digital.session import DigitalSession, close_tracks
 from open_antenna_validation.hardware import DeviceInfo, HardwareError, SdrDriver
 from open_antenna_validation.hardware import create_driver as default_factory
@@ -346,6 +348,7 @@ class Station:
                 request = {**request, "load_test": {
                     k: load.get(k) for k in ("verdict", "message", "loads", "station_load",
                                              "cores", "ended_ms")}}
+            self._check_decoder(request)
             free = shutil.disk_usage(self.db.path.parent).free
             uuid = cm.create_campaign(self.db, self.config, self.receiver, request,
                                       devices=self.devices_report(), free_bytes=free)
@@ -370,6 +373,31 @@ class Station:
         self._publish_status()
 
     # --- digital campaigns ------------------------------------------------------------
+
+    def digital_setup(self) -> dict[str, Any]:
+        """Sub-bands and decoders, for the campaign form."""
+        tools = wsjtx.find_tools(self.config.digital.wsjtx_path)
+        return {
+            "subbands": [b.model_dump() for b in self.config.digital.subbands],
+            "decoders": {m: tools.decoder_for(MODES[m]) is not None for m in MODES},
+            "encoders": {m: tools.encoder_for(MODES[m]) is not None for m in MODES},
+            "wsjtx_dir": tools.bin_dir,
+            "locator": self.config.station.locator,
+        }
+
+    def _check_decoder(self, request: dict[str, Any]) -> None:
+        name = request.get("digital")
+        if not name:
+            return
+        tools = wsjtx.find_tools(self.config.digital.wsjtx_path)
+        if name not in MODES or tools.decoder_for(MODES[name]) is None:
+            raise cm.CampaignError(
+                "Décodeur de WSJT-X introuvable : installez WSJT-X (Debian : paquet « wsjtx » ;"
+                " Windows : https://wsjt.sourceforge.io/), ou indiquez son dossier dans "
+                "[digital] wsjtx_path.")
+        if not self.config.station.locator:
+            raise cm.CampaignError("Indiquez le locator de la station (page Installation) : "
+                                   "il donne la distance et l'azimut des stations décodées.")
 
     def _open_digital(self, run: cm.Running) -> None:
         if not run.params.get("digital") or self.digital is not None:

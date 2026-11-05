@@ -254,10 +254,11 @@ class SimulatedDriver(SdrDriver):
             wave = {"carrier": self._carrier, "ssb": self._ssb, "ft8": self._ft8}[s.kind](
                 s, off, t, tr)
             air += 10 ** (s.dbfs / 20) * wave
+        antenna_db = cfg.signal_offset_db + np.where(on_b, cfg.antenna_b_signal_db, 0.0)
+        air *= 10 ** ((fading_db + antenna_db) / 20)
         if cfg.digital_stations:
-            air += self._digital_air(t, tr, on_b)
-        air *= 10 ** ((fading_db + cfg.signal_offset_db
-                       + np.where(on_b, cfg.antenna_b_signal_db, 0.0)) / 20)
+            # Each digital station fades on its own path (see _digital_air).
+            air += self._digital_air(t, tr, on_b) * 10 ** (antenna_db / 20)
 
         noise_db = (cfg.noise_dbfs + cfg.noise_offset_db
                     + np.where(on_b, cfg.antenna_b_noise_db, 0.0))
@@ -298,7 +299,11 @@ class SimulatedDriver(SdrDriver):
                 continue
             mode = MODES[name]  # type: ignore[index]
             base = np.zeros(len(t24), dtype=np.complex128)
-            for st, audio_hz, gain_a, gain_b, amp_db in self._digital_layout()[name]:
+            for n_st, (st, audio_hz, gain_a, gain_b, amp_db) in enumerate(
+                    self._digital_layout()[name]):
+                # Slow fading of this path: its own period and phase, not locked to the slots.
+                fade = self._config.fading_db / 2 * np.sin(
+                    2 * math.pi * t24 / (17.3 + 6.1 * n_st) + 1.7 * n_st)
                 for k in range(math.floor(t24[0] / mode.slot_s),
                                math.floor(t24[-1] / mode.slot_s) + 1):
                     text = _sim_message(name, st, k, table["partner"])
@@ -315,7 +320,7 @@ class SimulatedDriver(SdrDriver):
                     ph = phase[i] * (1 - frac) + phase[i + 1] * frac
                     # Antenna of the block (a switch falls between two slots).
                     gain = gain_b if b_share > 0.5 else gain_a
-                    base[on] += 10 ** ((amp_db + gain) / 20) * np.exp(
+                    base[on] += 10 ** ((amp_db + gain + fade[on]) / 20) * np.exp(
                         1j * (ph + 2 * math.pi * audio_hz * t24[on]))
             if not base.any():
                 continue

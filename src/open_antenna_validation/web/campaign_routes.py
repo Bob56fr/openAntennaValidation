@@ -45,6 +45,9 @@ class CampaignBody(BaseModel):
     accept_load: bool = False
     # Publication on the WordPress site: private (not sent), public, unlisted (link only).
     visibility: Literal["private", "public", "unlisted"] = "private"
+    # FT8, FT4 or WSPR decoding on the digital sub-band of ``band`` (P10).
+    digital: Literal["ft8", "ft4", "wspr"] | None = None
+    band: str = ""
 
 
 class LoadTestBody(BaseModel):
@@ -86,6 +89,7 @@ def build_router(station: Station) -> APIRouter:
             "disk_free_bytes": free,
             "load_test_s": cfg.campaign.load_test_s,
             "wordpress": station.publisher.report(),
+            "digital": station.digital_setup(),
             "campaign": station.campaign_report(),
         }
 
